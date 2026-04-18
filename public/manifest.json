@@ -1,0 +1,18 @@
+{
+  "name": "Hisaab — Group Expense Tracker",
+  "short_name": "Hisaab",
+  "description": "Split bills, track debts, and settle up with your group — the Pakistani way.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0C0F1A",
+  "theme_color": "#4F6EF7",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

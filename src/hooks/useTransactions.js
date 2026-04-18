@@ -27,5 +27,19 @@ export function useTransactions(groupId) {
     load()
   }, [load])
 
+  // Real-time: refresh whenever any transaction changes for this group
+  useEffect(() => {
+    if (!groupId) return
+    const channel = supabase
+      .channel(`transactions:${groupId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'transactions', filter: `group_id=eq.${groupId}` },
+        () => { load() },
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [groupId, load])
+
   return { transactions, loading, refresh: load }
 }

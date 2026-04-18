@@ -16,7 +16,7 @@ export default function AddExpense() {
   const { session, user } = useAuth()
   const nav = useNavigate()
   const { showToast } = useToast()
-  const { activeGroupId } = useGroup(user?.id)
+  const { activeGroupId, members } = useGroup(user?.id)
 
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
@@ -71,6 +71,24 @@ export default function AddExpense() {
       showToast(error.message, 'error')
       return
     }
+
+    // Auto-create debts: each other member owes the payer their share
+    if (parsedRow.split_count > 1 && members?.length > 1) {
+      const others = members.filter((m) => m.id !== user.id)
+      if (others.length > 0) {
+        const debtRows = others.map((m) => ({
+          group_id: activeGroupId,
+          ower_id: m.id,
+          owed_to_id: user.id,
+          amount_paise: rupeesToPaise(parsedRow.share_rupees),
+          description: parsedRow.description,
+          settled: false,
+          created_at: new Date().toISOString(),
+        }))
+        await supabase.from('debts').insert(debtRows)
+      }
+    }
+
     showToast('Expense logged')
     nav('/dashboard')
   }

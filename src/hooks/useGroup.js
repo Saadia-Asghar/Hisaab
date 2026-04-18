@@ -30,10 +30,18 @@ export function useGroup(userId) {
       .select('*')
       .eq('id', activeGroupId)
       .maybeSingle()
-    if (ge || !g) {
+    if (ge) {
       setGroup(null)
       setMembers([])
       setLoading(false)
+      return
+    }
+    if (!g) {
+      setGroup(null)
+      setMembers([])
+      setLoading(false)
+      setActiveGroupIdState(null)
+      localStorage.removeItem(STORAGE_KEY)
       return
     }
     setGroup(g)

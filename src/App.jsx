@@ -8,6 +8,7 @@ import AddExpense from './pages/AddExpense'
 import PoolWallet from './pages/PoolWallet'
 import Debts from './pages/Debts'
 import Settlement from './pages/Settlement'
+import Profile from './pages/Profile'
 import { PageWrapper } from './components/layout/PageWrapper'
 import { SkeletonList } from './components/ui/Skeleton'
 
@@ -71,6 +72,14 @@ export default function App() {
             element={
               <Protected>
                 <Settlement />
+              </Protected>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <Protected>
+                <Profile />
               </Protected>
             }
           />
