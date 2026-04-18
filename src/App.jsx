@@ -8,14 +8,30 @@ import AddExpense from './pages/AddExpense'
 import PoolWallet from './pages/PoolWallet'
 import Debts from './pages/Debts'
 import Settlement from './pages/Settlement'
+import Profile from './pages/Profile'
 import { PageWrapper } from './components/layout/PageWrapper'
 import { SkeletonList } from './components/ui/Skeleton'
 
 function Protected({ children }) {
   const { session, loading, isSupabaseConfigured } = useAuth()
+
   if (!isSupabaseConfigured) {
-    return <PageWrapper>Add Supabase keys in .env.local</PageWrapper>
+    return (
+      <PageWrapper>
+        <div className="card mx-auto mt-20 max-w-sm text-center">
+          <p className="text-2xl mb-3">⚙️</p>
+          <p className="font-display font-semibold">Setup Required</p>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            Add your Supabase keys to <code className="rounded bg-[var(--bg-surface)] px-1">.env.local</code>
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+          </p>
+        </div>
+      </PageWrapper>
+    )
   }
+
   if (loading) {
     return (
       <PageWrapper>
@@ -23,6 +39,7 @@ function Protected({ children }) {
       </PageWrapper>
     )
   }
+
   if (!session) return <Navigate to="/" replace />
   return children
 }
@@ -71,6 +88,14 @@ export default function App() {
             element={
               <Protected>
                 <Settlement />
+              </Protected>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <Protected>
+                <Profile />
               </Protected>
             }
           />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { MessageCircle } from 'lucide-react'
+import { MessageCircle, CheckCircle2, Share2, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useGroup } from '../hooks/useGroup'
@@ -13,51 +13,127 @@ import { calculateSettlement, totalPaiseFromTransfers } from '../utils/settlemen
 import { formatRsLabel } from '../utils/formatters'
 
 export default function Settlement() {
-  const { session, user } = useAuth()
+  const { session } = useAuth()
   const { showToast } = useToast()
   const { activeGroupId, members } = useGroup(user?.id)
   const [debts, setDebts] = useState([])
-  const [paid, setPaid] = useState(() => new Set())
+  const [loading, setLoading] = useState(true)
+  const [settling, setSettling] = useState(new Set())
+  const [done, setDone] = useState(new Set())
+
+  async function load() {
+    if (!activeGroupId) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const { data } = await supabase
+      .from('debts')
+      .select('*')
+      .eq('group_id', activeGroupId)
+      .eq('settled', false)
+    setDebts(data ?? [])
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function load() {
-      if (!activeGroupId) return
-      const { data } = await supabase
-        .from('debts')
-        .select('*')
-        .eq('group_id', activeGroupId)
-        .eq('settled', false)
-      setDebts(data ?? [])
-    }
     load()
   }, [activeGroupId])
 
   const transfers = useMemo(() => calculateSettlement(debts), [debts])
   const total = totalPaiseFromTransfers(transfers)
 
-  const byId = useMemo(() => Object.fromEntries((members ?? []).map((m) => [m.id, m])), [members])
+  const byId = useMemo(
+    () => Object.fromEntries((members ?? []).map((m) => [m.id, m])),
+    [members]
+  )
 
-  const monthLabel = new Date().toLocaleString('en-PK', { month: 'long', year: 'numeric' })
+  const monthLabel = new Date().toLocaleString('en-PK', {
+    month: 'long',
+    year: 'numeric',
+  })
 
   if (!session) return <Navigate to="/" replace />
 
+  // Mark ALL debts between t.from → t.to as settled in the database
+  async function markPaid(idx, t) {
+    if (settling.has(idx) || done.has(idx)) return
+    setSettling((s) => new Set(s).add(idx))
+
+    const { error } = await supabase
+      .from('debts')
+      .update({ settled: true, settled_at: new Date().toISOString() })
+      .eq('group_id', activeGroupId)
+      .eq('ower_id', t.from)
+      .eq('owed_to_id', t.to)
+      .eq('settled', false)
+
+    setSettling((s) => {
+      const n = new Set(s)
+      n.delete(idx)
+      return n
+    })
+
+    if (error) {
+      showToast(error.message, 'error')
+    } else {
+      setDone((s) => new Set(s).add(idx))
+      // Remove settled debts from local state
+      setDebts((prev) =>
+        prev.map((d) =>
+          d.ower_id === t.from && d.owed_to_id === t.to ? { ...d, settled: true } : d
+        )
+      )
+      showToast(`${byId[t.from]?.name ?? 'Settled'} ✓ Hisaab clear!`)
+    }
+  }
+
+  async function markAllPaid() {
+    if (!activeGroupId || transfers.length === 0) return
+    const { error } = await supabase
+      .from('debts')
+      .update({ settled: true, settled_at: new Date().toISOString() })
+      .eq('group_id', activeGroupId)
+      .eq('settled', false)
+
+    if (error) {
+      showToast(error.message, 'error')
+    } else {
+      showToast('Sab settle ho gaya! 🎉')
+      setDone(new Set(transfers.map((_, i) => i)))
+      setDebts([])
+    }
+  }
+
   function shareText() {
-    const lines = transfers.map(
-      (t) => `${byId[t.from]?.name ?? '?'} → ${byId[t.to]?.name}: Rs ${(t.amount_paise / 100).toLocaleString('en-PK')}`
+    const visibleTransfers = transfers.filter((_, i) => !done.has(i))
+    if (visibleTransfers.length === 0) {
+      navigator.clipboard.writeText(`Hisaab — ${monthLabel}: Sab clear hai! ✓`)
+      showToast('Copied!')
+      return
+    }
+    const lines = visibleTransfers.map(
+      (t) =>
+        `${byId[t.from]?.name ?? '?'} → ${byId[t.to]?.name ?? '?'}: ${formatRsLabel(t.amount_paise)}`
     )
-    const body = [`Hisaab — ${monthLabel} Settlement`, '━━━━━━━━━━━━━━━━━━━━━', ...lines, '━━━━━━━━━━━━━━━━━━━━━', 'Hisaab app se generate hua ✓'].join('\n')
-    navigator.clipboard.writeText(body).then(() => showToast('Copied to clipboard'))
+    const body = [
+      `Hisaab — ${monthLabel} Settlement`,
+      '━━━━━━━━━━━━━━━━━━━━━',
+      ...lines,
+      '━━━━━━━━━━━━━━━━━━━━━',
+      `Total: ${formatRsLabel(total)}`,
+      'Hisaab app se generate hua ✓',
+    ].join('\n')
+    navigator.clipboard.writeText(body).then(() => showToast('Copied to clipboard!'))
   }
 
   function waOne(t) {
-    const body = `${byId[t.from]?.name} → ${byId[t.to]?.name}: ${formatRsLabel(t.amount_paise)} — Hisaab settlement`
+    const body = `${byId[t.from]?.name ?? 'Tum'} → ${byId[t.to]?.name ?? '?'}: ${formatRsLabel(t.amount_paise)} — Hisaab settlement\n\nPlease settle karo! 🙏`
     window.open(`https://wa.me/?text=${encodeURIComponent(body)}`, '_blank')
   }
 
-  function markPaid(idx) {
-    setPaid((s) => new Set(s).add(String(idx)))
-    showToast('Marked paid (UI)')
-  }
+  const pendingTransfers = transfers.filter((_, i) => !done.has(i))
+  const allDone = transfers.length > 0 && pendingTransfers.length === 0
 
   return (
     <PageWrapper>
@@ -66,53 +142,172 @@ export default function Settlement() {
           <h1 className="font-display text-lg font-semibold">Month-End Hisaab</h1>
           <p className="text-xs text-[var(--text-secondary)]">{monthLabel}</p>
         </div>
-        <Link to="/dashboard" className="text-sm text-[var(--accent)]">
-          Home
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn-ghost p-2 text-xs"
+            onClick={load}
+            title="Refresh"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+          <Link to="/dashboard" className="text-sm text-[var(--accent)]">
+            Home
+          </Link>
+        </div>
       </div>
 
-      <div className="card">
-        <p className="text-sm text-[var(--text-secondary)]">
-          {transfers.length} transfers needed to settle Rs {(total / 100).toLocaleString('en-PK')} total
-        </p>
-      </div>
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="skeleton h-20 w-full" />
+          ))}
+        </div>
+      ) : allDone ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="card flex flex-col items-center py-12 text-center"
+        >
+          <CheckCircle2 className="h-12 w-12 text-[var(--success)]" />
+          <h2 className="mt-4 font-display text-xl font-bold">Sab Clear! 🎉</h2>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            Is mahine ka poora hisaab settle ho gaya hai.
+          </p>
+        </motion.div>
+      ) : transfers.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="card flex flex-col items-center py-12 text-center"
+        >
+          <CheckCircle2 className="h-12 w-12 text-[var(--success)]" />
+          <h2 className="mt-4 font-display text-xl font-bold">Koi Debt Nahi! 🎉</h2>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            Sab expenses settle hain.
+          </p>
+        </motion.div>
+      ) : (
+        <>
+          {/* Summary card */}
+          <div className="card mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-[var(--text-secondary)] uppercase tracking-wide">
+                  Minimum Transfers Needed
+                </p>
+                <p className="balance-number mt-1">{pendingTransfers.length}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-[var(--text-secondary)] uppercase tracking-wide">
+                  Total Amount
+                </p>
+                <p className="font-display text-lg font-bold mt-1">
+                  {formatRsLabel(total)}
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-[var(--text-muted)]">
+              Greedy algorithm se minimum transfers calculate hua hai
+            </p>
+          </div>
 
-      <div className="mt-6 space-y-3">
-        {transfers.map((t, i) => {
-          const done = paid.has(String(i))
-          return (
-            <motion.div
-              key={`${t.from}-${t.to}-${i}`}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className={`card flex flex-wrap items-center justify-between gap-3 ${done ? 'border-emerald-500/40 bg-emerald-500/5' : ''}`}
+          <div className="space-y-3">
+            {transfers.map((t, i) => {
+              const isDone = done.has(i)
+              const isSettling = settling.has(i)
+              const fromProfile = byId[t.from]
+              const toProfile = byId[t.to]
+
+              return (
+                <motion.div
+                  key={`${t.from}-${t.to}-${i}`}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.06 }}
+                  className={`card transition-all duration-300 ${
+                    isDone
+                      ? 'border-emerald-500/40 bg-emerald-500/5'
+                      : 'hover:border-[var(--border-accent)]'
+                  }`}
+                >
+                  {/* Transfer header */}
+                  <div className="flex items-center gap-2">
+                    <Avatar name={fromProfile?.name} color={fromProfile?.avatar_color} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {fromProfile?.name ?? 'Member'}
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">pays</p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="font-display font-bold text-[var(--accent)]">
+                        {formatRsLabel(t.amount_paise)}
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">→</p>
+                    </div>
+                    <div className="flex-1 min-w-0 text-right">
+                      <p className="text-sm font-medium truncate">
+                        {toProfile?.name ?? 'Member'}
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">receives</p>
+                    </div>
+                    <Avatar name={toProfile?.name} color={toProfile?.avatar_color} size="sm" />
+                  </div>
+
+                  {/* Actions */}
+                  {isDone ? (
+                    <div className="mt-3 flex items-center gap-2 text-emerald-400">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className="text-sm font-medium">Settled ✓</span>
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        className="btn-ghost flex-1 py-2 text-xs"
+                        onClick={() => waOne(t)}
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        Remind
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary flex-1 py-2 text-xs"
+                        onClick={() => markPaid(i, t)}
+                        disabled={isSettling}
+                      >
+                        {isSettling ? '...' : 'Mark Paid ✓'}
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              )
+            })}
+          </div>
+
+          {/* Bottom actions */}
+          <div className="mt-8 flex gap-3">
+            <button
+              type="button"
+              className="btn-ghost flex-1 py-3"
+              onClick={shareText}
             >
-              <div className="flex items-center gap-2">
-                <Avatar name={byId[t.from]?.name} color={byId[t.from]?.avatar_color} size="sm" />
-                <span className="font-display font-semibold">{formatRsLabel(t.amount_paise)}</span>
-                <Avatar name={byId[t.to]?.name} color={byId[t.to]?.avatar_color} size="sm" />
-              </div>
-              <div className="flex gap-2">
-                <button type="button" className="btn-ghost py-2 text-xs" onClick={() => waOne(t)}>
-                  <MessageCircle className="h-4 w-4" />
-                </button>
-                <button type="button" className="btn-primary py-2 text-xs" onClick={() => markPaid(i)}>
-                  Mark Paid
-                </button>
-              </div>
-            </motion.div>
-          )
-        })}
-      </div>
-
-      {transfers.length === 0 ? (
-        <p className="mt-8 text-center text-[var(--text-muted)]">No unsettled debts. 🎉</p>
-      ) : null}
-
-      <button type="button" className="btn-primary mt-8 w-full" onClick={shareText}>
-        Sab Share Karo
-      </button>
+              <Share2 className="h-4 w-4" />
+              Share
+            </button>
+            {pendingTransfers.length > 1 ? (
+              <button
+                type="button"
+                className="btn-primary flex-1 py-3"
+                onClick={markAllPaid}
+              >
+                Sab Mark Paid ✓
+              </button>
+            ) : null}
+          </div>
+        </>
+      )}
 
       <BottomNav />
     </PageWrapper>

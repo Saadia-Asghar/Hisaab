@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Sparkles } from 'lucide-react'
+import { ArrowLeft, Sparkles, Users, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { parseExpenseText } from '../lib/deepseek'
 import { useAuth } from '../hooks/useAuth'
@@ -9,6 +9,7 @@ import { useGroup } from '../hooks/useGroup'
 import { PageWrapper } from '../components/layout/PageWrapper'
 import { BottomNav } from '../components/layout/BottomNav'
 import { CategoryPill } from '../components/ui/CategoryPill'
+import { Avatar } from '../components/ui/Avatar'
 import { useToast } from '../context/ToastContext'
 import { rupeesToPaise } from '../utils/formatters'
 
@@ -16,7 +17,7 @@ export default function AddExpense() {
   const { session, user } = useAuth()
   const nav = useNavigate()
   const { showToast } = useToast()
-  const { activeGroupId } = useGroup(user?.id)
+  const { activeGroupId, members } = useGroup(user?.id)
 
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
@@ -27,7 +28,18 @@ export default function AddExpense() {
   const [mDesc, setMDesc] = useState('')
   const [mCat, setMCat] = useState('other')
 
+  const nonPayerMembers = (members ?? []).filter((m) => m.id !== user?.id)
+  const [selectedDebtors, setSelectedDebtors] = useState(null)
+  const [showSplitPicker, setShowSplitPicker] = useState(false)
+
   if (!session) return <Navigate to="/" replace />
+
+  function toggleDebtor(id) {
+    setSelectedDebtors((prev) => {
+      const current = prev ?? nonPayerMembers.map((m) => m.id)
+      return current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
+    })
+  }
 
   async function onParse() {
     setLoading(true)
@@ -41,22 +53,25 @@ export default function AddExpense() {
     }
     if (!res) {
       setManual(true)
-      showToast('Manual entry', 'error')
+      showToast('Manual entry pe switch kar rahe hain', 'error')
       return
     }
+    const auto = nonPayerMembers.slice(0, Math.max(0, (res.split_count ?? 2) - 1)).map((m) => m.id)
+    setSelectedDebtors(auto)
     setParsed(res)
     setManual(false)
   }
 
   async function confirm(parsedRow) {
     if (!activeGroupId) {
-      showToast('Join a group first', 'error')
+      showToast('Pehle group join karo', 'error')
       return
     }
     const amountRupees = parsedRow.amount_rupees
     const split = parsedRow.split_count
     const share = parsedRow.share_rupees
-    const { error } = await supabase.from('transactions').insert({
+
+    const { error: txErr } = await supabase.from('transactions').insert({
       group_id: activeGroupId,
       paid_by: user.id,
       amount_paise: rupeesToPaise(amountRupees),
@@ -64,14 +79,40 @@ export default function AddExpense() {
       category: parsedRow.category,
       split_count: split,
       share_paise: rupeesToPaise(share),
-      raw_input: text,
+      raw_input: text || null,
       created_at: new Date().toISOString(),
     })
-    if (error) {
-      showToast(error.message, 'error')
+
+    if (txErr) {
+      showToast(txErr.message, 'error')
       return
     }
-    showToast('Expense logged')
+
+    const debtors =
+      selectedDebtors ?? nonPayerMembers.slice(0, Math.max(0, split - 1)).map((m) => m.id)
+    const sharePaise = rupeesToPaise(share)
+
+    if (debtors.length > 0) {
+      const debtRows = debtors.map((memberId) => ({
+        group_id: activeGroupId,
+        ower_id: memberId,
+        owed_to_id: user.id,
+        amount_paise: sharePaise,
+        description: parsedRow.description,
+        settled: false,
+        created_at: new Date().toISOString(),
+      }))
+
+      const { error: debtErr } = await supabase.from('debts').insert(debtRows)
+      if (debtErr) {
+        showToast('Kharch save hua, lekin debts auto-create nahi hue', 'error')
+      } else {
+        showToast(`Kharch save! ${debtors.length} log ko notify kar do 💬`)
+      }
+    } else {
+      showToast('Kharch save ho gaya!')
+    }
+
     nav('/dashboard')
   }
 
@@ -79,18 +120,23 @@ export default function AddExpense() {
     const amountRupees = Number(mAmount)
     const split = Math.max(1, Number(mSplit) || 2)
     if (!amountRupees || amountRupees <= 0) {
-      showToast('Enter amount', 'error')
+      showToast('Amount likho', 'error')
       return
     }
     const share = Math.round(amountRupees / split)
     await confirm({
       amount_rupees: amountRupees,
-      description: mDesc || 'Expense',
+      description: mDesc || 'Kharch',
       split_count: split,
       share_rupees: share,
       category: mCat,
     })
   }
+
+  const debtorIds =
+    selectedDebtors ??
+    nonPayerMembers.slice(0, parsed ? Math.max(0, (parsed.split_count ?? 2) - 1) : 0).map((m) => m.id)
+  const debtorNames = debtorIds.map((id) => nonPayerMembers.find((m) => m.id === id)?.name).filter(Boolean)
 
   return (
     <PageWrapper>
@@ -101,27 +147,54 @@ export default function AddExpense() {
         <h1 className="font-display text-lg font-semibold">Kharch Add Karo</h1>
       </div>
 
-      <textarea
-        className="input-field min-h-[120px] resize-y font-sans"
-        placeholder='likho: bijli 3800 split 5, ya Ahmed ne grocery li 1200 hum 4 hain...'
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
+      <div className="relative">
+        <textarea
+          className="input-field min-h-[120px] resize-none font-sans"
+          placeholder="likho: bijli 3800 split 5, ya Ahmed ne grocery li 1200 hum 4 hain..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-[10px] bg-[var(--bg-surface)]/80">
+            <div className="flex items-center gap-2 text-sm text-[var(--accent)]">
+              <Sparkles className="h-4 w-4 animate-spin" />
+              Samajh raha hai...
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="mt-2 flex flex-wrap gap-2">
         {['bijli 3800 split 5', 'pizza 1800 4 bande', 'uber 650 3 log'].map((ex) => (
-          <span key={ex} className="pill bg-[var(--bg-surface)] text-[var(--text-muted)]">
+          <button
+            key={ex}
+            type="button"
+            className="pill cursor-pointer bg-[var(--bg-surface)] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
+            onClick={() => setText(ex)}
+          >
             {ex}
-          </span>
+          </button>
         ))}
       </div>
 
-      <button type="button" className="btn-primary mt-4 w-full" onClick={onParse} disabled={loading || !text.trim()}>
+      <button
+        type="button"
+        className="btn-primary mt-4 w-full"
+        onClick={onParse}
+        disabled={loading || !text.trim()}
+      >
         <Sparkles className="h-4 w-4" />
-        {loading ? 'Parse kar rahe hain...' : 'Samjho →'}
+        {loading ? 'Parse kar rahe hain...' : 'Samjho & Split Karo →'}
       </button>
 
-      <button type="button" className="btn-ghost mt-3 w-full text-sm" onClick={() => setManual(true)}>
+      <button
+        type="button"
+        className="btn-ghost mt-3 w-full text-sm"
+        onClick={() => {
+          setSelectedDebtors(null)
+          setManual(true)
+        }}
+      >
         Manual entry
       </button>
 
@@ -134,61 +207,142 @@ export default function AddExpense() {
             transition={{ duration: 0.3 }}
             className="card mt-6"
           >
-            <p className="text-sm text-[var(--text-secondary)]">{parsed.description}</p>
+            <CategoryPill category={parsed.category} />
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">{parsed.description}</p>
             <p className="balance-number mt-2">Rs {parsed.amount_rupees?.toLocaleString?.('en-PK')}</p>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              ÷ {parsed.split_count} people = Rs {parsed.share_rupees} each
+              ÷ {parsed.split_count} log ={' '}
+              <span className="font-semibold text-[var(--text-primary)]">Rs {parsed.share_rupees}</span> per head
             </p>
-            <div className="mt-3">
-              <CategoryPill category={parsed.category} />
-            </div>
+
+            {nonPayerMembers.length > 0 ? (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-lg bg-[var(--bg-surface)] px-3 py-2"
+                  onClick={() => setShowSplitPicker((p) => !p)}
+                >
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-[var(--accent)]" />
+                    <span className="text-sm text-[var(--text-secondary)]">
+                      {debtorIds.length > 0
+                        ? `${debtorNames.join(', ')} owe you`
+                        : 'Koi debt create nahi hoga'}
+                    </span>
+                  </div>
+                  {showSplitPicker ? (
+                    <ChevronUp className="h-4 w-4 text-[var(--text-muted)]" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-[var(--text-muted)]" />
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {showSplitPicker ? (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-2 space-y-2 rounded-lg bg-[var(--bg-surface)] p-3">
+                        {nonPayerMembers.map((m) => {
+                          const isSelected = debtorIds.includes(m.id)
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors ${isSelected ? 'bg-[var(--accent)]/20' : 'hover:bg-[var(--bg-card)]'}`}
+                              onClick={() => toggleDebtor(m.id)}
+                            >
+                              <Avatar name={m.name} color={m.avatar_color} size="sm" />
+                              <span className="flex-1 text-left text-sm">{m.name}</span>
+                              <div
+                                className={`h-4 w-4 rounded-full border-2 transition-colors ${isSelected ? 'border-[var(--accent)] bg-[var(--accent)]' : 'border-[var(--border)]'}`}
+                              />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+            ) : null}
+
             <div className="mt-4 flex gap-2">
-              <button type="button" className="btn-ghost flex-1" onClick={() => setParsed(null)}>
+              <button
+                type="button"
+                className="btn-ghost flex-1"
+                onClick={() => {
+                  setParsed(null)
+                  setSelectedDebtors(null)
+                  setManual(true)
+                }}
+              >
                 Edit manually
               </button>
               <button type="button" className="btn-primary flex-1" onClick={() => confirm(parsed)}>
-                Confirm & Deduct
+                Confirm & Save ✓
               </button>
             </div>
           </motion.div>
         ) : null}
       </AnimatePresence>
 
-      {manual ? (
-        <div className="card mt-6 space-y-3">
-          <p className="text-sm font-medium text-[var(--text-secondary)]">Manual entry</p>
-          <input
-            className="input-field"
-            placeholder="Amount (Rs)"
-            inputMode="decimal"
-            value={mAmount}
-            onChange={(e) => setMAmount(e.target.value)}
-          />
-          <input
-            className="input-field"
-            placeholder="Split count"
-            inputMode="numeric"
-            value={mSplit}
-            onChange={(e) => setMSplit(e.target.value)}
-          />
-          <input
-            className="input-field"
-            placeholder="Description"
-            value={mDesc}
-            onChange={(e) => setMDesc(e.target.value)}
-          />
-          <select className="input-field" value={mCat} onChange={(e) => setMCat(e.target.value)}>
-            {['utilities', 'food', 'transport', 'groceries', 'entertainment', 'other'].map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <button type="button" className="btn-primary w-full" onClick={confirmManual}>
-            Confirm
-          </button>
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {manual && !parsed ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="card mt-6 space-y-3"
+          >
+            <p className="text-sm font-medium text-[var(--text-secondary)]">Manual entry</p>
+            <div>
+              <label className="mb-1 block text-xs text-[var(--text-secondary)]">Amount (Rs)</label>
+              <input
+                className="input-field"
+                placeholder="3800"
+                inputMode="decimal"
+                value={mAmount}
+                onChange={(e) => setMAmount(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[var(--text-secondary)]">Split among how many people?</label>
+              <input
+                className="input-field"
+                placeholder="5"
+                inputMode="numeric"
+                value={mSplit}
+                onChange={(e) => setMSplit(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[var(--text-secondary)]">Description</label>
+              <input
+                className="input-field"
+                placeholder="Electricity bill"
+                value={mDesc}
+                onChange={(e) => setMDesc(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[var(--text-secondary)]">Category</label>
+              <select className="input-field" value={mCat} onChange={(e) => setMCat(e.target.value)}>
+                {['utilities', 'food', 'transport', 'groceries', 'entertainment', 'other'].map((c) => (
+                  <option key={c} value={c}>
+                    {c.charAt(0).toUpperCase() + c.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button type="button" className="btn-primary w-full" onClick={confirmManual}>
+              Confirm & Save ✓
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <BottomNav />
     </PageWrapper>
