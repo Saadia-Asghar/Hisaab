@@ -74,6 +74,10 @@ CREATE TABLE IF NOT EXISTS public.debts (
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS debts_group_settled_idx ON public.debts (group_id, settled);
 CREATE INDEX IF NOT EXISTS transactions_group_created_idx ON public.transactions (group_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS group_members_group_id_idx ON public.group_members (group_id);
+CREATE INDEX IF NOT EXISTS group_members_user_id_idx ON public.group_members (user_id);
+CREATE INDEX IF NOT EXISTS pool_contributions_group_month_idx ON public.pool_contributions (group_id, month);
+CREATE INDEX IF NOT EXISTS debts_group_parties_idx ON public.debts (group_id, ower_id, owed_to_id) WHERE settled = false;
 
 -- ─── Functions ────────────────────────────────────────────────────────────────
 
@@ -106,8 +110,8 @@ GRANT EXECUTE ON FUNCTION public.get_group_stats(uuid, text) TO authenticated;
 
 -- ─── Enable Row Level Security ────────────────────────────────────────────────
 
-ALTER TABLE public.profiles          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.groups            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.groups             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.group_members     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pool_contributions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions      ENABLE ROW LEVEL SECURITY;
@@ -132,7 +136,9 @@ CREATE POLICY "profiles_select_visible" ON public.profiles FOR SELECT USING (
   )
 );
 CREATE POLICY "profiles_insert_own" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
-CREATE POLICY "profiles_update_own" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "profiles_update_own" ON public.profiles FOR UPDATE
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
 
 -- ─── Groups ───────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "groups_select_member"        ON public.groups;
@@ -180,6 +186,80 @@ DROP POLICY IF EXISTS "debts_group_members" ON public.debts;
 CREATE POLICY "debts_group_members" ON public.debts FOR ALL
   USING    (group_id IN (SELECT group_id FROM public.group_members WHERE user_id = auth.uid()))
   WITH CHECK (group_id IN (SELECT group_id FROM public.group_members WHERE user_id = auth.uid()));
+
+-- ─── Integrity: FK columns must reference members of the same group ───────────
+-- (Stops bad client data: e.g. debt for user not in group.)
+
+CREATE OR REPLACE FUNCTION public.debts_enforce_group_members()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.group_members WHERE group_id = NEW.group_id AND user_id = NEW.ower_id
+  ) THEN
+    RAISE EXCEPTION 'debts: ower_id must be a member of group_id';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.group_members WHERE group_id = NEW.group_id AND user_id = NEW.owed_to_id
+  ) THEN
+    RAISE EXCEPTION 'debts: owed_to_id must be a member of group_id';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS debts_enforce_group_members_trg ON public.debts;
+CREATE TRIGGER debts_enforce_group_members_trg
+  BEFORE INSERT OR UPDATE OF group_id, ower_id, owed_to_id ON public.debts
+  FOR EACH ROW
+  EXECUTE PROCEDURE public.debts_enforce_group_members();
+
+CREATE OR REPLACE FUNCTION public.transactions_enforce_payer_in_group()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.group_members WHERE group_id = NEW.group_id AND user_id = NEW.paid_by
+  ) THEN
+    RAISE EXCEPTION 'transactions: paid_by must be a member of group_id';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS transactions_enforce_payer_trg ON public.transactions;
+CREATE TRIGGER transactions_enforce_payer_trg
+  BEFORE INSERT OR UPDATE OF group_id, paid_by ON public.transactions
+  FOR EACH ROW
+  EXECUTE PROCEDURE public.transactions_enforce_payer_in_group();
+
+CREATE OR REPLACE FUNCTION public.pool_contributions_enforce_member()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.group_members WHERE group_id = NEW.group_id AND user_id = NEW.user_id
+  ) THEN
+    RAISE EXCEPTION 'pool_contributions: user_id must be a member of group_id';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS pool_contributions_enforce_member_trg ON public.pool_contributions;
+CREATE TRIGGER pool_contributions_enforce_member_trg
+  BEFORE INSERT OR UPDATE OF group_id, user_id ON public.pool_contributions
+  FOR EACH ROW
+  EXECUTE PROCEDURE public.pool_contributions_enforce_member();
 
 -- ─── Enable Realtime ──────────────────────────────────────────────────────────
 -- Run this ONCE in Supabase SQL editor to enable live subscriptions.
