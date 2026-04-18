@@ -73,14 +73,20 @@ export default function Login() {
           </div>
           {error ? <p className="text-sm text-red-400">{error}</p> : null}
           <button type="submit" className="btn-primary w-full" disabled={busy}>
-            {busy ? '...' : 'Dakhil Ho'}
+            {busy ? '...' : 'Sign in'}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-[var(--text-secondary)]">
-          Account nahi hai?{' '}
+          New here?{' '}
           <Link className="text-[var(--accent)] hover:underline" to="/signup">
-            Banao →
+            Create an account →
+          </Link>
+        </p>
+
+        <p className="mt-4 text-center text-xs text-[var(--text-muted)]">
+          <Link className="hover:underline" to="/">
+            ← Back to home
           </Link>
         </p>
       </motion.div>
