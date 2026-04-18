@@ -7,7 +7,6 @@ import { parseExpenseText } from '../lib/deepseek'
 import { useAuth } from '../hooks/useAuth'
 import { useGroup } from '../hooks/useGroup'
 import { PageWrapper } from '../components/layout/PageWrapper'
-import { BottomNav } from '../components/layout/BottomNav'
 import { CategoryPill } from '../components/ui/CategoryPill'
 import { Avatar } from '../components/ui/Avatar'
 import { useToast } from '../context/ToastContext'
@@ -53,7 +52,7 @@ export default function AddExpense() {
     }
     if (!res) {
       setManual(true)
-      showToast('Manual entry pe switch kar rahe hain', 'error')
+      showToast('Could not parse input. Switching to manual entry.', 'error')
       return
     }
     const auto = nonPayerMembers.slice(0, Math.max(0, (res.split_count ?? 2) - 1)).map((m) => m.id)
@@ -64,7 +63,7 @@ export default function AddExpense() {
 
   async function confirm(parsedRow) {
     if (!activeGroupId) {
-      showToast('Pehle group join karo', 'error')
+      showToast('Please create or join a group first.', 'error')
       return
     }
     const amountRupees = parsedRow.amount_rupees
@@ -105,12 +104,12 @@ export default function AddExpense() {
 
       const { error: debtErr } = await supabase.from('debts').insert(debtRows)
       if (debtErr) {
-        showToast('Kharch save hua, lekin debts auto-create nahi hue', 'error')
+        showToast('Expense saved, but debts could not be auto-created.', 'error')
       } else {
-        showToast(`Kharch save! ${debtors.length} log ko notify kar do 💬`)
+        showToast(`Expense saved. ${debtors.length} members now owe this share.`)
       }
     } else {
-      showToast('Kharch save ho gaya!')
+      showToast('Expense saved successfully.')
     }
 
     nav('/dashboard')
@@ -120,13 +119,13 @@ export default function AddExpense() {
     const amountRupees = Number(mAmount)
     const split = Math.max(1, Number(mSplit) || 2)
     if (!amountRupees || amountRupees <= 0) {
-      showToast('Amount likho', 'error')
+      showToast('Please enter a valid amount.', 'error')
       return
     }
     const share = Math.round(amountRupees / split)
     await confirm({
       amount_rupees: amountRupees,
-      description: mDesc || 'Kharch',
+      description: mDesc || 'Expense',
       split_count: split,
       share_rupees: share,
       category: mCat,
@@ -139,18 +138,18 @@ export default function AddExpense() {
   const debtorNames = debtorIds.map((id) => nonPayerMembers.find((m) => m.id === id)?.name).filter(Boolean)
 
   return (
-    <PageWrapper>
+    <PageWrapper showBottomNav>
       <div className="mb-4 flex items-center gap-3">
         <Link to="/dashboard" className="btn-ghost p-2">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="font-display text-lg font-semibold">Kharch Add Karo</h1>
+        <h1 className="font-display text-lg font-semibold">Add Expense</h1>
       </div>
 
       <div className="relative">
         <textarea
           className="input-field min-h-[120px] resize-none font-sans"
-          placeholder="likho: bijli 3800 split 5, ya Ahmed ne grocery li 1200 hum 4 hain..."
+          placeholder="Example: Electricity 3800 split 5, or Groceries 1200 shared by 4..."
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
@@ -158,14 +157,14 @@ export default function AddExpense() {
           <div className="absolute inset-0 flex items-center justify-center rounded-[10px] bg-[var(--bg-surface)]/80">
             <div className="flex items-center gap-2 text-sm text-[var(--accent)]">
               <Sparkles className="h-4 w-4 animate-spin" />
-              Samajh raha hai...
+              Parsing your entry...
             </div>
           </div>
         )}
       </div>
 
       <div className="mt-2 flex flex-wrap gap-2">
-        {['bijli 3800 split 5', 'pizza 1800 4 bande', 'uber 650 3 log'].map((ex) => (
+        {['electricity 3800 split 5', 'pizza 1800 split 4', 'uber 650 split 3'].map((ex) => (
           <button
             key={ex}
             type="button"
@@ -184,7 +183,7 @@ export default function AddExpense() {
         disabled={loading || !text.trim()}
       >
         <Sparkles className="h-4 w-4" />
-        {loading ? 'Parse kar rahe hain...' : 'Samjho & Split Karo →'}
+        {loading ? 'Parsing...' : 'Parse & Split →'}
       </button>
 
       <button
@@ -211,7 +210,7 @@ export default function AddExpense() {
             <p className="mt-2 text-sm text-[var(--text-secondary)]">{parsed.description}</p>
             <p className="balance-number mt-2">Rs {parsed.amount_rupees?.toLocaleString?.('en-PK')}</p>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              ÷ {parsed.split_count} log ={' '}
+              ÷ {parsed.split_count} people ={' '}
               <span className="font-semibold text-[var(--text-primary)]">Rs {parsed.share_rupees}</span> per head
             </p>
 
@@ -227,7 +226,7 @@ export default function AddExpense() {
                     <span className="text-sm text-[var(--text-secondary)]">
                       {debtorIds.length > 0
                         ? `${debtorNames.join(', ')} owe you`
-                        : 'Koi debt create nahi hoga'}
+                        : 'No debt entries will be created'}
                     </span>
                   </div>
                   {showSplitPicker ? (
@@ -344,7 +343,6 @@ export default function AddExpense() {
         ) : null}
       </AnimatePresence>
 
-      <BottomNav />
     </PageWrapper>
   )
 }

@@ -8,7 +8,6 @@ import { useGroup } from '../hooks/useGroup'
 import { useTransactions } from '../hooks/useTransactions'
 import { usePoolStats } from '../hooks/usePoolStats'
 import { PageWrapper } from '../components/layout/PageWrapper'
-import { BottomNav } from '../components/layout/BottomNav'
 import { BalanceCard } from '../components/ui/BalanceCard'
 import { TransactionItem } from '../components/ui/TransactionItem'
 import { Avatar } from '../components/ui/Avatar'
@@ -96,7 +95,7 @@ export default function Dashboard() {
 
   function shareInvite() {
     if (!group?.invite_code) return
-    const text = `Hisaab app pe join karo!\nGroup: ${group.name}\nInvite code: ${group.invite_code}\n\nDownload: hisaab.vercel.app`
+    const text = `Join my Hisaab group.\nGroup: ${group.name}\nInvite code: ${group.invite_code}\n\nOpen: hisaab.vercel.app`
     if (navigator.share) {
       navigator.share({ title: 'Join Hisaab Group', text }).catch(() => null)
     } else {
@@ -157,7 +156,7 @@ export default function Dashboard() {
       return
     }
     setActiveGroupId(g.id)
-    showToast('Group join ho gaya!')
+    showToast('Group joined successfully.')
     setJoinOpen(false)
     setBusy(false)
     refresh()
@@ -165,7 +164,7 @@ export default function Dashboard() {
 
   async function runSeed() {
     if (!activeGroupId || !members?.length) {
-      showToast('Pehle group aur members chahiye', 'error')
+      showToast('Create or join a group with members first.', 'error')
       return
     }
     try {
@@ -183,15 +182,21 @@ export default function Dashboard() {
   const currentUserName = profileById[user.id]?.name ?? user.email?.split('@')[0] ?? 'User'
 
   return (
-    <PageWrapper>
+    <PageWrapper showBottomNav>
       {/* Header */}
       <header className="mb-6 flex items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold text-[var(--accent)]">Hisaab</h1>
+          <h1 className="font-display text-2xl font-bold text-[var(--accent)] lg:hidden">Hisaab</h1>
+          <h1 className="font-display hidden text-2xl font-bold text-[var(--text-primary)] lg:block">
+            {group?.name ?? 'Home'}
+          </h1>
           {group ? (
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5">{group.name}</p>
+            <p className="mt-0.5 text-xs text-[var(--text-secondary)] lg:text-[var(--text-muted)]">
+              <span className="lg:hidden">{group.name}</span>
+              <span className="hidden lg:inline">Group overview</span>
+            </p>
           ) : (
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5">Salam, {currentUserName} 👋</p>
+            <p className="mt-0.5 text-xs text-[var(--text-secondary)]">Welcome back, {currentUserName}</p>
           )}
         </div>
         <button
@@ -209,9 +214,9 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card space-y-4">
           <div className="text-center">
             <p className="text-2xl mb-2">🏠</p>
-            <p className="font-display font-semibold">Group Banao ya Join Karo</p>
+            <p className="font-display font-semibold">Create or Join a Group</p>
             <p className="text-sm text-[var(--text-muted)] mt-1">
-              Apne roommates ke saath expense tracking start karo
+              Start tracking shared expenses with your roommates.
             </p>
           </div>
           <div className="flex gap-2">
@@ -241,7 +246,7 @@ export default function Dashboard() {
               className="btn-primary flex flex-col items-center gap-1.5 py-3 text-center text-xs"
             >
               <Plus className="h-5 w-5" />
-              Kharch Add
+              Add Expense
             </Link>
             <Link
               to="/debts"
@@ -344,10 +349,10 @@ export default function Dashboard() {
               ) : transactions.length === 0 ? (
                 <div className="card flex flex-col items-center py-8 text-center">
                   <p className="text-2xl mb-2">💸</p>
-                  <p className="text-sm font-medium text-[var(--text-secondary)]">Koi kharch nahi abhi</p>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">Pehla kharch add karo!</p>
+                  <p className="text-sm font-medium text-[var(--text-secondary)]">No expenses yet</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">Add your first expense to get started.</p>
                   <Link to="/add-expense" className="btn-primary mt-4 text-xs py-2 px-4">
-                    + Kharch Add Karo
+                    + Add Expense
                   </Link>
                 </div>
               ) : (
@@ -375,7 +380,7 @@ export default function Dashboard() {
               className="btn-ghost w-full py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
               onClick={runSeed}
             >
-              🌱 Seed demo data (for judges)
+              🌱 Seed demo data
             </button>
           </motion.div>
         </>
@@ -392,7 +397,7 @@ export default function Dashboard() {
           >
             <h3 className="font-display text-lg font-semibold">New Group</h3>
             <p className="text-xs text-[var(--text-muted)] mt-1">
-              Ek invite code auto-generate hoga
+              A 6-character invite code will be generated automatically.
             </p>
 
             <label className="mt-4 block text-xs text-[var(--text-secondary)]">Group Name</label>
@@ -437,7 +442,7 @@ export default function Dashboard() {
             className="card w-full max-w-md"
           >
             <h3 className="font-display text-lg font-semibold">Join with Invite Code</h3>
-            <p className="text-xs text-[var(--text-muted)] mt-1">6-character code apne roommate se lo</p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">Enter the 6-character code from your roommate.</p>
             <input
               className="input-field mt-4 text-center text-2xl font-display font-bold uppercase tracking-[0.3em]"
               placeholder="ABC123"
@@ -457,8 +462,6 @@ export default function Dashboard() {
           </motion.form>
         </div>
       ) : null}
-
-      <BottomNav />
     </PageWrapper>
   )
 }

@@ -4,7 +4,6 @@ import { LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageWrapper } from '../components/layout/PageWrapper'
-import { BottomNav } from '../components/layout/BottomNav'
 import { Avatar } from '../components/ui/Avatar'
 import { useToast } from '../context/ToastContext'
 
@@ -44,7 +43,7 @@ export default function Profile() {
     if (!user?.id) return
     const trimmed = name.trim()
     if (!trimmed) {
-      showToast('Naam likho', 'error')
+      showToast('Please enter your name.', 'error')
       return
     }
     setSaving(true)
@@ -58,11 +57,11 @@ export default function Profile() {
       .eq('id', user.id)
     setSaving(false)
     if (error) showToast(error.message, 'error')
-    else showToast('Profile save ho gaya ✓')
+    else showToast('Profile saved successfully.')
   }
 
   return (
-    <PageWrapper>
+    <PageWrapper showBottomNav>
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="font-display text-lg font-semibold">Profile</h1>
         <Link to="/dashboard" className="text-sm text-[var(--accent)]">
@@ -80,7 +79,7 @@ export default function Profile() {
           </div>
 
           <div>
-            <label className="text-xs text-[var(--text-secondary)]">Naam</label>
+            <label className="text-xs text-[var(--text-secondary)]">Name</label>
             <input
               className="input-field mt-1"
               value={name}
@@ -133,7 +132,6 @@ export default function Profile() {
         Sign out
       </button>
 
-      <BottomNav />
     </PageWrapper>
   )
 }

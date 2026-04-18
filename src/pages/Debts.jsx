@@ -6,7 +6,6 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useGroup } from '../hooks/useGroup'
 import { PageWrapper } from '../components/layout/PageWrapper'
-import { BottomNav } from '../components/layout/BottomNav'
 import { DebtCard } from '../components/ui/DebtCard'
 import { useToast } from '../context/ToastContext'
 import { formatRsLabel, rupeesToPaise } from '../utils/formatters'
@@ -45,9 +44,9 @@ export default function Debts() {
 
   if (!session) return <Navigate to="/" replace />
 
-  // Tab filter logic — corrected Urdu labels:
-  // "Mujhe Milna Hai" = I should receive = they owe me = owed_to_id is me
-  // "Unhe Dena Hai"  = I have to give them = I owe them = ower_id is me
+  // Tab filter logic:
+  // "Receivables" = they owe me = owed_to_id is me
+  // "Payables" = I owe them = ower_id is me
   const list =
     tab === 'owed_to_me'
       ? debts.filter((d) => d.owed_to_id === user.id)
@@ -76,8 +75,8 @@ export default function Debts() {
     const amt = (d.amount_paise / 100).toLocaleString('en-PK')
     const text =
       tab === 'owed_to_me'
-        ? `Hisaab reminder 🙏\n${other?.name}, tumhare zimmay mera Rs ${amt} baaki hai (${d.description || 'qarz'}). Jaldi settle karo.\n— Hisaab App`
-        : `Hisaab: ${other?.name}, main apna Rs ${amt} jald deta hoon (${d.description || 'qarz'}).\n— Hisaab App`
+        ? `Hisaab reminder:\n${other?.name}, you have an outstanding balance of Rs ${amt} (${d.description || 'debt'}).\nPlease settle at your convenience.\n— Hisaab`
+        : `Hisaab note:\n${other?.name}, I will settle Rs ${amt} shortly (${d.description || 'debt'}).\n— Hisaab`
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
 
@@ -87,7 +86,7 @@ export default function Debts() {
     const oweId = form.owe
     const rs = Number(form.amount)
     if (!oweId || !rs) {
-      showToast('Member aur amount dono chahiye', 'error')
+      showToast('Please select a member and enter an amount.', 'error')
       return
     }
     const { error } = await supabase.from('debts').insert({
@@ -102,7 +101,7 @@ export default function Debts() {
     if (error) {
       showToast(error.message, 'error')
     } else {
-      showToast('Debt record ho gaya!')
+      showToast('Debt recorded successfully.')
       setFab(false)
       setForm({ owe: '', amount: '', desc: '' })
       load()
@@ -118,7 +117,7 @@ export default function Debts() {
     .reduce((s, d) => s + d.amount_paise, 0)
 
   return (
-    <PageWrapper>
+    <PageWrapper showBottomNav>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-lg font-semibold">Debts</h1>
         <div className="flex gap-2">
@@ -135,13 +134,13 @@ export default function Debts() {
       {!loading && (totalOwedToMe > 0 || totalIowe > 0) ? (
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div className="card py-3 text-center">
-            <p className="text-xs text-[var(--text-secondary)] uppercase tracking-wide">Mujhe Milna</p>
+            <p className="text-xs text-[var(--text-secondary)] uppercase tracking-wide">Receivables</p>
             <p className="font-display font-bold text-[var(--success)] mt-1">
               {formatRsLabel(totalOwedToMe)}
             </p>
           </div>
           <div className="card py-3 text-center">
-            <p className="text-xs text-[var(--text-secondary)] uppercase tracking-wide">Mujhe Dena</p>
+            <p className="text-xs text-[var(--text-secondary)] uppercase tracking-wide">Payables</p>
             <p className="font-display font-bold text-[var(--danger)] mt-1">
               {formatRsLabel(totalIowe)}
             </p>
@@ -160,7 +159,7 @@ export default function Debts() {
           }`}
           onClick={() => setTab('owed_to_me')}
         >
-          Mujhe Milna Hai
+          Receivables
           {!loading && debts.filter((d) => d.owed_to_id === user.id).length > 0 ? (
             <span className="ml-1.5 rounded-full bg-[var(--success)]/20 px-1.5 py-0.5 text-xs text-[var(--success)]">
               {debts.filter((d) => d.owed_to_id === user.id).length}
@@ -176,7 +175,7 @@ export default function Debts() {
           }`}
           onClick={() => setTab('i_owe')}
         >
-          Unhe Dena Hai
+          Payables
           {!loading && debts.filter((d) => d.ower_id === user.id).length > 0 ? (
             <span className="ml-1.5 rounded-full bg-[var(--danger)]/20 px-1.5 py-0.5 text-xs text-[var(--danger)]">
               {debts.filter((d) => d.ower_id === user.id).length}
@@ -202,8 +201,8 @@ export default function Debts() {
           <p className="mt-3 font-display font-semibold text-[var(--text-primary)]">All Clear!</p>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
             {tab === 'owed_to_me'
-              ? 'Koi tumhara paisa nahi roka hua.'
-              : 'Tumhara koi loan nahi hai.'}
+              ? 'No one currently owes you.'
+              : 'You have no outstanding payables.'}
           </p>
         </motion.div>
       ) : (
@@ -297,7 +296,6 @@ export default function Debts() {
         </div>
       ) : null}
 
-      <BottomNav />
     </PageWrapper>
   )
 }

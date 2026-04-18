@@ -17,7 +17,7 @@ export function BottomNav() {
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] bg-[var(--bg-surface)]/85 backdrop-blur"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-1">
+      <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-1 lg:max-w-7xl">
         {items.map(({ to, icon: Icon, label }) => {
           const active =
             pathname === to || (to !== '/dashboard' && pathname.startsWith(to))

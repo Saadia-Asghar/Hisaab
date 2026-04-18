@@ -7,7 +7,6 @@ import { useAuth } from '../hooks/useAuth'
 import { useGroup } from '../hooks/useGroup'
 import { usePoolStats } from '../hooks/usePoolStats'
 import { PageWrapper } from '../components/layout/PageWrapper'
-import { BottomNav } from '../components/layout/BottomNav'
 import { Avatar } from '../components/ui/Avatar'
 import { useToast } from '../context/ToastContext'
 import { generateReceipt } from '../utils/generateReceipt'
@@ -69,7 +68,7 @@ export default function PoolWallet() {
     if (!activeGroupId) return
     const rs = Number(amount)
     if (!rs || rs <= 0) {
-      showToast('Valid amount likho', 'error')
+      showToast('Please enter a valid amount.', 'error')
       return
     }
     setBusy(true)
@@ -100,7 +99,7 @@ export default function PoolWallet() {
       date: new Date().toLocaleString('en-PK'),
       receiptId: data.id.slice(0, 8),
     })
-    showToast('Contribution saved — receipt download ho raha hai!')
+    showToast('Contribution saved. Downloading receipt...')
     setModal(false)
     setAmount('')
     refreshPool()
@@ -111,7 +110,7 @@ export default function PoolWallet() {
   const circumference = 2 * Math.PI * 56
 
   return (
-    <PageWrapper>
+    <PageWrapper showBottomNav>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-lg font-semibold">Pool Wallet</h1>
         <Link to="/dashboard" className="text-sm text-[var(--accent)]">
@@ -122,9 +121,9 @@ export default function PoolWallet() {
       {!activeGroupId ? (
         <div className="card flex flex-col items-center py-12 text-center">
           <p className="text-3xl mb-3">🏦</p>
-          <p className="text-sm text-[var(--text-secondary)]">Pehle koi group create ya join karo.</p>
+          <p className="text-sm text-[var(--text-secondary)]">Create or join a group to start using the pool wallet.</p>
           <Link to="/dashboard" className="btn-primary mt-4 text-sm">
-            Dashboard pe jao
+            Go to Dashboard
           </Link>
         </div>
       ) : (
@@ -196,7 +195,7 @@ export default function PoolWallet() {
                       {m.id === user.id ? ' (you)' : ''}
                     </p>
                     <p className="text-xs text-[var(--text-muted)]">
-                      {m.contributed > 0 ? `Contributed: ${formatRsLabel(m.contributed)}` : 'Abhi tak nahi diya'}
+                      {m.contributed > 0 ? `Contributed: ${formatRsLabel(m.contributed)}` : 'No contribution yet'}
                     </p>
                   </div>
                   {m.hasPaid ? (
@@ -210,11 +209,11 @@ export default function PoolWallet() {
 
             {notPaid.length > 0 ? (
               <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                ⏳ {notPaid.map((m) => m.name).join(', ')} ne abhi contribute nahi kiya
+                ⏳ Pending contributions: {notPaid.map((m) => m.name).join(', ')}
               </div>
             ) : members.length > 0 ? (
               <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
-                ✓ Sab ne is mahine contribute kar diya!
+                ✓ Everyone has contributed this month.
               </div>
             ) : null}
           </div>
@@ -226,7 +225,7 @@ export default function PoolWallet() {
             {loadingRows ? (
               <div className="skeleton h-14 w-full" />
             ) : rows.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">Koi contribution nahi abhi.</p>
+              <p className="text-sm text-[var(--text-muted)]">No contributions yet.</p>
             ) : (
               rows.map((r) => (
                 <motion.div
@@ -283,7 +282,7 @@ export default function PoolWallet() {
             onSubmit={contribute}
             className="card w-full max-w-sm"
           >
-            <h3 className="font-display font-semibold">Pool mein Contribute Karo</h3>
+            <h3 className="font-display font-semibold">Contribute to Pool</h3>
             {targetPerPerson > 0 ? (
               <p className="mt-1 text-xs text-[var(--text-muted)]">
                 Suggested per person: {formatRsLabel(targetPerPerson)}
@@ -318,7 +317,6 @@ export default function PoolWallet() {
         </div>
       ) : null}
 
-      <BottomNav />
     </PageWrapper>
   )
 }
