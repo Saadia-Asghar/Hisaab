@@ -61,17 +61,17 @@ export function BalanceCard({
 
       {threshold === 1 ? (
         <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-          Khayal rakho — pool ka 60% kharch ho gaya
+          Heads up — you’ve spent 60% of the pool.
         </div>
       ) : null}
       {threshold === 2 ? (
         <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-          ⚠️ Pool ka 80% kharch — baaki {days} din hain, hoshiyari se kharchaein
+          ⚠️ 80% spent — {days} days left. Spend carefully.
         </div>
       ) : null}
       {threshold === 3 ? (
         <div className="mt-3 rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-2 text-sm text-red-100">
-          Pool khatam ho gaya is mahine
+          Pool is empty for this month.
         </div>
       ) : null}
     </motion.div>

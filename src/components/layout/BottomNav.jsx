@@ -14,7 +14,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] bg-[var(--bg-surface)]"
+      className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] bg-[var(--bg-surface)]/85 backdrop-blur"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-1">
@@ -25,17 +25,20 @@ export function BottomNav() {
             <NavLink
               key={to}
               to={to}
-              className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2"
+              className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 ${
+                active ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
+              }`}
               aria-label={label}
             >
-              <Icon
-                className="h-5 w-5 transition-colors"
-                strokeWidth={active ? 2.5 : 2}
-                style={{ color: active ? 'var(--accent)' : 'var(--text-muted)' }}
-              />
+              <span
+                className={`flex h-9 w-12 items-center justify-center rounded-xl transition-all ${
+                  active ? 'bg-[var(--accent)]/12 shadow-[0_0_0_1px_var(--border-accent)]' : ''
+                }`}
+              >
+                <Icon className="h-5 w-5 transition-colors" strokeWidth={active ? 2.5 : 2} />
+              </span>
               <span
                 className="text-[10px] font-medium transition-colors"
-                style={{ color: active ? 'var(--accent)' : 'var(--text-muted)' }}
               >
                 {label}
               </span>

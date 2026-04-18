@@ -3,38 +3,53 @@
 @tailwind utilities;
 
 :root {
-  --bg-base: #0c0f1a;
-  --bg-surface: #111827;
-  --bg-card: #1e2435;
-  --bg-card-hover: #252d40;
+  /* Base */
+  --bg-base: #0b1020;
+  --bg-surface: #0f1830;
+  --bg-card: #141f3b;
+  --bg-card-hover: #18254a;
+
+  /* Elevation + rings */
+  --shadow-elev-1: 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 30px rgba(0, 0, 0, 0.45);
+  --shadow-elev-2: 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 50px rgba(0, 0, 0, 0.55);
+  --ring: rgba(79, 110, 247, 0.22);
   --accent: #4f6ef7;
   --accent-hover: #3d5ce8;
-  --accent-glow: rgba(79, 110, 247, 0.15);
+  --accent-glow: rgba(79, 110, 247, 0.18);
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
-  --text-muted: #475569;
-  --border: rgba(255, 255, 255, 0.06);
-  --border-accent: rgba(79, 110, 247, 0.3);
+  --text-muted: rgba(148, 163, 184, 0.72);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-accent: rgba(79, 110, 247, 0.35);
 }
 
 @layer base {
   html {
     @apply antialiased;
     font-family: 'DM Sans', system-ui, sans-serif;
-    background: var(--bg-base);
+    background: radial-gradient(1200px 600px at 50% -10%, rgba(79, 110, 247, 0.22), transparent 55%),
+      radial-gradient(900px 500px at 10% 10%, rgba(16, 185, 129, 0.10), transparent 45%),
+      radial-gradient(900px 500px at 90% 10%, rgba(245, 158, 11, 0.10), transparent 45%),
+      var(--bg-base);
     color: var(--text-primary);
   }
 
   body {
     min-height: 100dvh;
-    background: var(--bg-base);
+    background: transparent;
   }
 
   #root {
     min-height: 100dvh;
+  }
+
+  ::selection {
+    background: rgba(79, 110, 247, 0.35);
+    color: var(--text-primary);
   }
 }
 
@@ -43,9 +58,15 @@
 }
 
 .card {
-  @apply rounded-[14px] border p-5 transition-colors;
+  @apply rounded-[16px] border p-5 transition-all duration-200;
   background: var(--bg-card);
   border-color: var(--border);
+  box-shadow: var(--shadow-elev-1);
+}
+.card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-elev-2);
 }
 
 .card-glow {
@@ -66,6 +87,9 @@
   background: var(--accent-hover);
   box-shadow: 0 0 24px var(--accent-glow);
 }
+.btn-primary:active {
+  transform: translateY(0.5px);
+}
 
 .btn-ghost {
   @apply btn rounded-[10px] border px-5 py-3;
@@ -76,10 +100,29 @@
 .btn-ghost:hover {
   background: var(--bg-card);
 }
+.btn-ghost:active {
+  transform: translateY(0.5px);
+}
 
 .btn-danger {
   @apply btn rounded-[10px] px-5 py-3 text-white;
   background: var(--danger);
+}
+
+.btn-primary:disabled,
+.btn-ghost:disabled,
+.btn-danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary:focus-visible,
+.btn-ghost:focus-visible,
+.btn-danger:focus-visible,
+.input-field:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring), 0 0 0 1px var(--border-strong);
 }
 
 .input-field {
@@ -94,7 +137,7 @@
 }
 .input-field:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 
 .balance-number {
