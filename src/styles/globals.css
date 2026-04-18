@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-base: #0c0f1a;
+  --bg-surface: #111827;
+  --bg-card: #1e2435;
+  --bg-card-hover: #252d40;
+  --accent: #4f6ef7;
+  --accent-hover: #3d5ce8;
+  --accent-glow: rgba(79, 110, 247, 0.15);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-accent: rgba(79, 110, 247, 0.3);
+}
+
+@layer base {
+  html {
+    @apply antialiased;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--bg-base);
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+}
+
+.font-display {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+.card {
+  @apply rounded-[14px] border p-5 transition-colors;
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+
+.card-glow {
+  box-shadow: 0 0 0 1px var(--border), 0 8px 40px var(--accent-glow);
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 font-medium transition-all duration-200;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.btn-primary {
+  @apply btn rounded-[10px] px-5 py-3 text-white;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 transparent;
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 0 24px var(--accent-glow);
+}
+
+.btn-ghost {
+  @apply btn rounded-[10px] border px-5 py-3;
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-primary);
+}
+.btn-ghost:hover {
+  background: var(--bg-card);
+}
+
+.btn-danger {
+  @apply btn rounded-[10px] px-5 py-3 text-white;
+  background: var(--danger);
+}
+
+.input-field {
+  @apply w-full rounded-[10px] border px-4 py-3 outline-none transition-shadow;
+  background: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+}
+.input-field::placeholder {
+  color: var(--text-muted);
+}
+.input-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.balance-number {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 700;
+  font-size: clamp(1.75rem, 5vw, 2.25rem);
+  letter-spacing: -0.05em;
+  line-height: 1.1;
+}
+
+.avatar {
+  @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.pill {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.pill-utilities {
+  @apply bg-blue-500/20 text-blue-300;
+}
+.pill-food {
+  @apply bg-orange-500/20 text-orange-300;
+}
+.pill-transport {
+  @apply bg-cyan-500/20 text-cyan-300;
+}
+.pill-groceries {
+  @apply bg-emerald-500/20 text-emerald-300;
+}
+.pill-entertainment {
+  @apply bg-purple-500/20 text-purple-300;
+}
+.pill-other {
+  @apply bg-slate-500/20 text-slate-300;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  border-radius: 10px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg-card-hover) 50%,
+    var(--bg-surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes budget-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+.budget-bar-pulse {
+  animation: budget-pulse 1.2s ease-in-out infinite;
+}
+
+.safe-pb {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
+.safe-pt {
+  padding-top: env(safe-area-inset-top, 0px);
+}
