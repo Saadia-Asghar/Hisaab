@@ -21,6 +21,8 @@ export function ToastProvider({ children }) {
   )
 }
 
+/** @see ToastProvider — hook must live with context */
+// eslint-disable-next-line react-refresh/only-export-components -- paired hook for ToastProvider
 export function useToast() {
   const ctx = useContext(ToastCtx)
   if (!ctx) throw new Error('useToast outside ToastProvider')

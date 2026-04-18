@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { MessageCircle, CheckCircle2, Share2, RefreshCw } from 'lucide-react'
@@ -13,7 +13,7 @@ import { calculateSettlement, totalPaiseFromTransfers } from '../utils/settlemen
 import { formatRsLabel } from '../utils/formatters'
 
 export default function Settlement() {
-  const { session } = useAuth()
+  const { session, user } = useAuth()
   const { showToast } = useToast()
   const { activeGroupId, members } = useGroup(user?.id)
   const [debts, setDebts] = useState([])
@@ -21,7 +21,7 @@ export default function Settlement() {
   const [settling, setSettling] = useState(new Set())
   const [done, setDone] = useState(new Set())
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!activeGroupId) {
       setLoading(false)
       return
@@ -34,11 +34,11 @@ export default function Settlement() {
       .eq('settled', false)
     setDebts(data ?? [])
     setLoading(false)
-  }
+  }, [activeGroupId])
 
   useEffect(() => {
     load()
-  }, [activeGroupId])
+  }, [load])
 
   const transfers = useMemo(() => calculateSettlement(debts), [debts])
   const total = totalPaiseFromTransfers(transfers)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, RefreshCw } from 'lucide-react'
@@ -22,7 +22,7 @@ export default function Debts() {
   const [fab, setFab] = useState(false)
   const [form, setForm] = useState({ owe: '', amount: '', desc: '' })
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!activeGroupId) {
       setDebts([])
       setLoading(false)
@@ -37,11 +37,11 @@ export default function Debts() {
       .order('created_at', { ascending: false })
     setDebts(data ?? [])
     setLoading(false)
-  }
+  }, [activeGroupId])
 
   useEffect(() => {
     load()
-  }, [activeGroupId])
+  }, [load])
 
   if (!session) return <Navigate to="/" replace />
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { CheckCircle2, Clock, Download } from 'lucide-react'
@@ -18,7 +18,7 @@ export default function PoolWallet() {
   const { showToast } = useToast()
   const { activeGroupId, group, members, refresh } = useGroup(user?.id)
   const month = currentMonthKey()
-  const { contributedPaise, spentPaise, loading, refresh: refreshPool } = usePoolStats(activeGroupId, month)
+  const { contributedPaise, spentPaise, refresh: refreshPool } = usePoolStats(activeGroupId, month)
 
   const [modal, setModal] = useState(false)
   const [amount, setAmount] = useState('')
@@ -26,7 +26,7 @@ export default function PoolWallet() {
   const [rows, setRows] = useState([])
   const [loadingRows, setLoadingRows] = useState(true)
 
-  async function loadRows() {
+  const loadRows = useCallback(async () => {
     if (!activeGroupId) {
       setRows([])
       setLoadingRows(false)
@@ -41,11 +41,11 @@ export default function PoolWallet() {
       .order('created_at', { ascending: false })
     setRows(data ?? [])
     setLoadingRows(false)
-  }
+  }, [activeGroupId, month])
 
   useEffect(() => {
     loadRows()
-  }, [activeGroupId, month, contributedPaise])
+  }, [loadRows, contributedPaise])
 
   if (!session) return <Navigate to="/" replace />
 
