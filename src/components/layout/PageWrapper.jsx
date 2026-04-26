@@ -7,7 +7,7 @@ export function PageWrapper({ children, className = '', showBottomNav = false })
       className="min-h-dvh"
       style={{
         background:
-          'radial-gradient(1200px 520px at 50% -12%, rgba(79,110,247,0.12), transparent 58%), var(--bg-base)',
+          'linear-gradient(180deg, rgba(255,255,255,0.72) 0%, transparent 28%), var(--page-mesh)',
       }}
     >
       <SiteHeader />

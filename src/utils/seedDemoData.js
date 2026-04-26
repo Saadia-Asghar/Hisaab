@@ -1,10 +1,15 @@
 import { rupeesToPaise, currentMonthKey } from './formatters'
+import {
+  batchInsertTransactions,
+  batchInsertPoolContributions,
+  batchInsertDebts,
+} from '../lib/hisaabFirestore'
 
 /**
  * Seeds demo transactions, contributions, and debts for the current group month.
  * Maps members by profile name when possible (PRD demo names).
  */
-export async function seedDemoData(supabase, groupId, profilesInGroup) {
+export async function seedDemoData(groupId, profilesInGroup) {
   const month = currentMonthKey()
   const byName = Object.fromEntries((profilesInGroup ?? []).map((p) => [p.name, p]))
 
@@ -41,8 +46,7 @@ export async function seedDemoData(supabase, groupId, profilesInGroup) {
   }
 
   if (txRows.length) {
-    const { error: txErr } = await supabase.from('transactions').insert(txRows)
-    if (txErr) throw txErr
+    await batchInsertTransactions(groupId, txRows)
   }
 
   const contributors = [ali, hassan, bilal, omar, kamran].filter(Boolean)
@@ -56,8 +60,7 @@ export async function seedDemoData(supabase, groupId, profilesInGroup) {
   }))
 
   if (poolRows.length) {
-    const { error: poolErr } = await supabase.from('pool_contributions').insert(poolRows)
-    if (poolErr) throw poolErr
+    await batchInsertPoolContributions(groupId, poolRows)
   }
 
   const debtSpecs = [
@@ -82,8 +85,7 @@ export async function seedDemoData(supabase, groupId, profilesInGroup) {
   }
 
   if (debtRows.length) {
-    const { error: debtErr } = await supabase.from('debts').insert(debtRows)
-    if (debtErr) throw debtErr
+    await batchInsertDebts(groupId, debtRows)
   }
 
   return { transactions: txRows.length, contributions: poolRows.length, debts: debtRows.length }

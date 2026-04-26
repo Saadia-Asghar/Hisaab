@@ -1,13 +1,53 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { useSyncExternalStore } from 'react'
+import { listContributedPaiseForMonth, listTransactionAmountsForGroup } from '../lib/hisaabFirestore'
+import { isDemoMode } from '../lib/demoMode'
+import { subscribeDemo, getDemoSnapshot } from '../demo/demoStore'
 import { currentMonthKey } from '../utils/formatters'
 
 export function usePoolStats(groupId, monthKey = currentMonthKey()) {
+  const demoSnap = useSyncExternalStore(
+    isDemoMode() ? subscribeDemo : () => () => {},
+    isDemoMode() ? getDemoSnapshot : () => ({
+      transactions: [],
+      poolContributions: [],
+    }),
+    isDemoMode() ? getDemoSnapshot : () => ({
+      transactions: [],
+      poolContributions: [],
+    })
+  )
+
   const [contributedPaise, setContributedPaise] = useState(0)
   const [spentPaise, setSpentPaise] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const refresh = useCallback(async () => {
+    if (isDemoMode()) {
+      if (!groupId) {
+        setContributedPaise(0)
+        setSpentPaise(0)
+        setLoading(false)
+        return
+      }
+      const pc = demoSnap.poolContributions.filter((r) => r.group_id === groupId && r.month === monthKey)
+      const contrib = pc.reduce((s, r) => s + (r.amount_paise ?? 0), 0)
+
+      const spent = demoSnap.transactions
+        .filter((r) => r.group_id === groupId)
+        .reduce((s, r) => {
+          const d = new Date(r.created_at)
+          const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+          if (mk !== monthKey) return s
+          return s + (r.amount_paise ?? 0)
+        }, 0)
+
+      setContributedPaise(contrib)
+      setSpentPaise(spent)
+      setLoading(false)
+      return
+    }
+
     if (!groupId) {
       setContributedPaise(0)
       setSpentPaise(0)
@@ -16,30 +56,27 @@ export function usePoolStats(groupId, monthKey = currentMonthKey()) {
     }
     setLoading(true)
 
-    const { data: pc } = await supabase
-      .from('pool_contributions')
-      .select('amount_paise')
-      .eq('group_id', groupId)
-      .eq('month', monthKey)
+    try {
+      const pc = await listContributedPaiseForMonth(groupId, monthKey)
+      const tx = await listTransactionAmountsForGroup(groupId)
 
-    const { data: tx } = await supabase
-      .from('transactions')
-      .select('amount_paise, created_at')
-      .eq('group_id', groupId)
+      const contrib = (pc ?? []).reduce((s, r) => s + (r.amount_paise ?? 0), 0)
 
-    const contrib = (pc ?? []).reduce((s, r) => s + (r.amount_paise ?? 0), 0)
+      const spent = (tx ?? []).reduce((s, r) => {
+        const d = new Date(r.created_at)
+        const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        if (mk !== monthKey) return s
+        return s + (r.amount_paise ?? 0)
+      }, 0)
 
-    const spent = (tx ?? []).reduce((s, r) => {
-      const d = new Date(r.created_at)
-      const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      if (mk !== monthKey) return s
-      return s + (r.amount_paise ?? 0)
-    }, 0)
-
-    setContributedPaise(contrib)
-    setSpentPaise(spent)
+      setContributedPaise(contrib)
+      setSpentPaise(spent)
+    } catch {
+      setContributedPaise(0)
+      setSpentPaise(0)
+    }
     setLoading(false)
-  }, [groupId, monthKey])
+  }, [groupId, monthKey, demoSnap])
 
   useEffect(() => {
     refresh()

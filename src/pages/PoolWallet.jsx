@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { CheckCircle2, Clock, Download } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { listPoolContributionsForMonth, insertPoolContribution } from '../lib/hisaabFirestore'
+import { isDemoMode } from '../lib/demoMode'
+import { subscribeDemo, getDemoSnapshot, demoInsertPoolContribution } from '../demo/demoStore'
 import { useAuth } from '../hooks/useAuth'
 import { useGroup } from '../hooks/useGroup'
 import { usePoolStats } from '../hooks/usePoolStats'
@@ -16,6 +19,11 @@ export default function PoolWallet() {
   const { session, user } = useAuth()
   const { showToast } = useToast()
   const { activeGroupId, group, members, refresh } = useGroup(user?.id)
+  const demoSnap = useSyncExternalStore(
+    isDemoMode() ? subscribeDemo : () => () => {},
+    isDemoMode() ? getDemoSnapshot : () => ({ poolContributions: [] }),
+    isDemoMode() ? getDemoSnapshot : () => ({ poolContributions: [] })
+  )
   const month = currentMonthKey()
   const { contributedPaise, spentPaise, refresh: refreshPool } = usePoolStats(activeGroupId, month)
 
@@ -32,15 +40,22 @@ export default function PoolWallet() {
       return
     }
     setLoadingRows(true)
-    const { data } = await supabase
-      .from('pool_contributions')
-      .select('*')
-      .eq('group_id', activeGroupId)
-      .eq('month', month)
-      .order('created_at', { ascending: false })
-    setRows(data ?? [])
+    if (isDemoMode()) {
+      const list = demoSnap.poolContributions
+        .filter((r) => r.group_id === activeGroupId && r.month === month)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      setRows(list)
+      setLoadingRows(false)
+      return
+    }
+    try {
+      const data = await listPoolContributionsForMonth(activeGroupId, month)
+      setRows(data ?? [])
+    } catch {
+      setRows([])
+    }
     setLoadingRows(false)
-  }, [activeGroupId, month])
+  }, [activeGroupId, month, demoSnap])
 
   useEffect(() => {
     loadRows()
@@ -72,9 +87,10 @@ export default function PoolWallet() {
       return
     }
     setBusy(true)
-    const { data, error } = await supabase
-      .from('pool_contributions')
-      .insert({
+
+    let receiptRow = null
+    if (isDemoMode()) {
+      receiptRow = demoInsertPoolContribution({
         group_id: activeGroupId,
         user_id: user.id,
         amount_paise: rupeesToPaise(rs),
@@ -82,14 +98,26 @@ export default function PoolWallet() {
         note: 'Contribution',
         created_at: new Date().toISOString(),
       })
-      .select()
-      .single()
-    setBusy(false)
-
-    if (error) {
-      showToast(error.message, 'error')
-      return
+    } else {
+      try {
+        const data = await insertPoolContribution(activeGroupId, {
+          group_id: activeGroupId,
+          user_id: user.id,
+          amount_paise: rupeesToPaise(rs),
+          month,
+          note: 'Contribution',
+          created_at: new Date().toISOString(),
+        })
+        receiptRow = data
+      } catch (error) {
+        setBusy(false)
+        showToast(error?.message ?? 'Contribution failed', 'error')
+        return
+      }
+      setBusy(false)
     }
+
+    setBusy(false)
 
     const profile = members.find((m) => m.id === user.id)
     generateReceipt({
@@ -97,7 +125,7 @@ export default function PoolWallet() {
       amount_rupees: rs,
       groupName: group?.name ?? 'Group',
       date: new Date().toLocaleString('en-PK'),
-      receiptId: data.id.slice(0, 8),
+      receiptId: receiptRow.id.slice(0, 8),
     })
     showToast('Contribution saved. Downloading receipt...')
     setModal(false)

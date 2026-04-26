@@ -25,7 +25,7 @@ export function DebtCard({
           <div className="flex items-center gap-2">
             <p className="truncate font-medium text-[var(--text-primary)]">{counterparty?.name}</p>
             {stale ? (
-              <span className="pill bg-red-500/20 text-xs text-red-300">&gt;7d</span>
+              <span className="pill bg-red-100 text-xs font-medium text-red-800">&gt;7d</span>
             ) : null}
           </div>
           <p className="balance-number mt-1 text-[var(--text-primary)]">{formatRsLabel(debt.amount_paise)}</p>

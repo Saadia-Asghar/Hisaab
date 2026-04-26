@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { MessageCircle, CheckCircle2, Share2, RefreshCw } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import {
+  listUnsettledDebts,
+  settleDebtsForTransfer,
+  settleAllDebtsInGroup,
+} from '../lib/hisaabFirestore'
+import { isDemoMode } from '../lib/demoMode'
+import { subscribeDemo, getDemoSnapshot, demoSettleDebtsForTransfer, demoSettleAllDebtsInGroup } from '../demo/demoStore'
 import { useAuth } from '../hooks/useAuth'
 import { useGroup } from '../hooks/useGroup'
 import { PageWrapper } from '../components/layout/PageWrapper'
@@ -15,6 +22,11 @@ export default function Settlement() {
   const { session, user } = useAuth()
   const { showToast } = useToast()
   const { activeGroupId, members } = useGroup(user?.id)
+  const demoSnap = useSyncExternalStore(
+    isDemoMode() ? subscribeDemo : () => () => {},
+    isDemoMode() ? getDemoSnapshot : () => ({ debts: [] }),
+    isDemoMode() ? getDemoSnapshot : () => ({ debts: [] })
+  )
   const [debts, setDebts] = useState([])
   const [loading, setLoading] = useState(true)
   const [settling, setSettling] = useState(new Set())
@@ -26,14 +38,20 @@ export default function Settlement() {
       return
     }
     setLoading(true)
-    const { data } = await supabase
-      .from('debts')
-      .select('*')
-      .eq('group_id', activeGroupId)
-      .eq('settled', false)
-    setDebts(data ?? [])
+    if (isDemoMode()) {
+      const rows = demoSnap.debts.filter((d) => d.group_id === activeGroupId && !d.settled)
+      setDebts(rows)
+      setLoading(false)
+      return
+    }
+    try {
+      const data = await listUnsettledDebts(activeGroupId)
+      setDebts(data ?? [])
+    } catch {
+      setDebts([])
+    }
     setLoading(false)
-  }, [activeGroupId])
+  }, [activeGroupId, demoSnap])
 
   useEffect(() => {
     load()
@@ -59,13 +77,30 @@ export default function Settlement() {
     if (settling.has(idx) || done.has(idx)) return
     setSettling((s) => new Set(s).add(idx))
 
-    const { error } = await supabase
-      .from('debts')
-      .update({ settled: true, settled_at: new Date().toISOString() })
-      .eq('group_id', activeGroupId)
-      .eq('ower_id', t.from)
-      .eq('owed_to_id', t.to)
-      .eq('settled', false)
+    if (isDemoMode()) {
+      demoSettleDebtsForTransfer(activeGroupId, t.from, t.to, true)
+      setSettling((s) => {
+        const n = new Set(s)
+        n.delete(idx)
+        return n
+      })
+      setDone((s) => new Set(s).add(idx))
+      load()
+      showToast(`${byId[t.from]?.name ?? 'Settled'} ✓ Hisaab clear!`)
+      return
+    }
+
+    try {
+      await settleDebtsForTransfer(activeGroupId, t.from, t.to, new Date().toISOString())
+    } catch (error) {
+      showToast(error?.message ?? 'Update failed', 'error')
+      setSettling((s) => {
+        const n = new Set(s)
+        n.delete(idx)
+        return n
+      })
+      return
+    }
 
     setSettling((s) => {
       const n = new Set(s)
@@ -73,34 +108,32 @@ export default function Settlement() {
       return n
     })
 
-    if (error) {
-      showToast(error.message, 'error')
-    } else {
-      setDone((s) => new Set(s).add(idx))
-      // Remove settled debts from local state
-      setDebts((prev) =>
-        prev.map((d) =>
-          d.ower_id === t.from && d.owed_to_id === t.to ? { ...d, settled: true } : d
-        )
+    setDone((s) => new Set(s).add(idx))
+    setDebts((prev) =>
+      prev.map((d) =>
+        d.ower_id === t.from && d.owed_to_id === t.to ? { ...d, settled: true } : d
       )
-      showToast(`${byId[t.from]?.name ?? 'Settled'} ✓ Hisaab clear!`)
-    }
+    )
+    showToast(`${byId[t.from]?.name ?? 'Settled'} ✓ Hisaab clear!`)
   }
 
   async function markAllPaid() {
     if (!activeGroupId || transfers.length === 0) return
-    const { error } = await supabase
-      .from('debts')
-      .update({ settled: true, settled_at: new Date().toISOString() })
-      .eq('group_id', activeGroupId)
-      .eq('settled', false)
-
-    if (error) {
-      showToast(error.message, 'error')
-    } else {
+    if (isDemoMode()) {
+      demoSettleAllDebtsInGroup(activeGroupId)
       showToast('All balances settled successfully.')
       setDone(new Set(transfers.map((_, i) => i)))
       setDebts([])
+      load()
+      return
+    }
+    try {
+      await settleAllDebtsInGroup(activeGroupId, new Date().toISOString())
+      showToast('All balances settled successfully.')
+      setDone(new Set(transfers.map((_, i) => i)))
+      setDebts([])
+    } catch (error) {
+      showToast(error?.message ?? 'Could not settle', 'error')
     }
   }
 

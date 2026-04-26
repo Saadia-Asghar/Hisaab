@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { LogOut } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { signOut } from 'firebase/auth'
+import { auth } from '../lib/firebase'
+import { getProfile, setProfileMerge } from '../lib/hisaabFirestore'
+import { isDemoMode, exitDemoAndReload } from '../lib/demoMode'
+import { demoFindProfile, demoUpdateProfile } from '../demo/demoStore'
 import { useAuth } from '../hooks/useAuth'
 import { PageWrapper } from '../components/layout/PageWrapper'
 import { Avatar } from '../components/ui/Avatar'
@@ -22,14 +26,28 @@ export default function Profile() {
     if (!user?.id) return
     let cancelled = false
     ;(async () => {
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
-      if (cancelled) return
-      if (data) {
-        setName(data.name ?? '')
-        setPhone(data.phone ?? '')
-        setAvatarColor(data.avatar_color ?? COLORS[0])
+      if (isDemoMode()) {
+        const data = demoFindProfile(user.id)
+        if (!cancelled && data) {
+          setName(data.name ?? '')
+          setPhone(data.phone ?? '')
+          setAvatarColor(data.avatar_color ?? COLORS[0])
+        }
+        if (!cancelled) setLoading(false)
+        return
       }
-      setLoading(false)
+      try {
+        const data = await getProfile(user.id)
+        if (cancelled) return
+        if (data) {
+          setName(data.name ?? '')
+          setPhone(data.phone ?? '')
+          setAvatarColor(data.avatar_color ?? COLORS[0])
+        }
+      } catch {
+        /* ignore */
+      }
+      if (!cancelled) setLoading(false)
     })()
     return () => {
       cancelled = true
@@ -47,17 +65,27 @@ export default function Profile() {
       return
     }
     setSaving(true)
-    const { error } = await supabase
-      .from('profiles')
-      .update({
+    if (isDemoMode()) {
+      demoUpdateProfile(user.id, {
         name: trimmed,
         phone: phone.trim() || null,
         avatar_color: avatarColor,
       })
-      .eq('id', user.id)
+      setSaving(false)
+      showToast('Profile saved successfully.')
+      return
+    }
+    try {
+      await setProfileMerge(user.id, {
+        name: trimmed,
+        phone: phone.trim() || null,
+        avatar_color: avatarColor,
+      })
+      showToast('Profile saved successfully.')
+    } catch (error) {
+      showToast(error?.message ?? 'Save failed', 'error')
+    }
     setSaving(false)
-    if (error) showToast(error.message, 'error')
-    else showToast('Profile saved successfully.')
   }
 
   return (
@@ -126,7 +154,9 @@ export default function Profile() {
       <button
         type="button"
         className="btn-ghost mt-6 flex w-full items-center justify-center gap-2 py-3 text-[var(--text-muted)]"
-        onClick={() => supabase.auth.signOut()}
+        onClick={() =>
+          isDemoMode() ? exitDemoAndReload() : auth && signOut(auth).catch(() => {})
+        }
       >
         <LogOut className="h-4 w-4" />
         Sign out

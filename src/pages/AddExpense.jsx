@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Sparkles, Users, ChevronDown, ChevronUp } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import { parseExpenseText } from '../lib/deepseek'
+import { insertDebtRows, insertTransaction } from '../lib/hisaabFirestore'
+import { isDemoMode } from '../lib/demoMode'
+import { demoInsertTransaction, demoInsertDebts } from '../demo/demoStore'
+import { parseExpenseText, OFFLINE_PARSER_EXAMPLE_LINES } from '../lib/deepseek'
 import { useAuth } from '../hooks/useAuth'
 import { useGroup } from '../hooks/useGroup'
 import { PageWrapper } from '../components/layout/PageWrapper'
@@ -70,21 +72,35 @@ export default function AddExpense() {
     const split = parsedRow.split_count
     const share = parsedRow.share_rupees
 
-    const { error: txErr } = await supabase.from('transactions').insert({
-      group_id: activeGroupId,
-      paid_by: user.id,
-      amount_paise: rupeesToPaise(amountRupees),
-      description: parsedRow.description,
-      category: parsedRow.category,
-      split_count: split,
-      share_paise: rupeesToPaise(share),
-      raw_input: text || null,
-      created_at: new Date().toISOString(),
-    })
-
-    if (txErr) {
-      showToast(txErr.message, 'error')
-      return
+    if (isDemoMode()) {
+      demoInsertTransaction({
+        group_id: activeGroupId,
+        paid_by: user.id,
+        amount_paise: rupeesToPaise(amountRupees),
+        description: parsedRow.description,
+        category: parsedRow.category,
+        split_count: split,
+        share_paise: rupeesToPaise(share),
+        raw_input: text || null,
+        created_at: new Date().toISOString(),
+      })
+    } else {
+      try {
+        await insertTransaction(activeGroupId, {
+          group_id: activeGroupId,
+          paid_by: user.id,
+          amount_paise: rupeesToPaise(amountRupees),
+          description: parsedRow.description,
+          category: parsedRow.category,
+          split_count: split,
+          share_paise: rupeesToPaise(share),
+          raw_input: text || null,
+          created_at: new Date().toISOString(),
+        })
+      } catch (txErr) {
+        showToast(txErr?.message ?? 'Could not save expense', 'error')
+        return
+      }
     }
 
     const debtors =
@@ -99,14 +115,20 @@ export default function AddExpense() {
         amount_paise: sharePaise,
         description: parsedRow.description,
         settled: false,
+        settled_at: null,
         created_at: new Date().toISOString(),
       }))
 
-      const { error: debtErr } = await supabase.from('debts').insert(debtRows)
-      if (debtErr) {
-        showToast('Expense saved, but debts could not be auto-created.', 'error')
-      } else {
+      if (isDemoMode()) {
+        demoInsertDebts(debtRows)
         showToast(`Expense saved. ${debtors.length} members now owe this share.`)
+      } else {
+        try {
+          await insertDebtRows(activeGroupId, debtRows)
+          showToast(`Expense saved. ${debtors.length} members now owe this share.`)
+        } catch {
+          showToast('Expense saved, but debts could not be auto-created.', 'error')
+        }
       }
     } else {
       showToast('Expense saved successfully.')
@@ -164,7 +186,7 @@ export default function AddExpense() {
       </div>
 
       <div className="mt-2 flex flex-wrap gap-2">
-        {['electricity 3800 split 5', 'pizza 1800 split 4', 'uber 650 split 3'].map((ex) => (
+        {OFFLINE_PARSER_EXAMPLE_LINES.slice(0, 5).map((ex) => (
           <button
             key={ex}
             type="button"

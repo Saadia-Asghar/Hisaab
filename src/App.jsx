@@ -14,19 +14,19 @@ import { PageWrapper } from './components/layout/PageWrapper'
 import { SkeletonList } from './components/ui/Skeleton'
 
 function Protected({ children }) {
-  const { session, loading, isSupabaseConfigured } = useAuth()
+  const { session, loading, appReady } = useAuth()
 
-  if (!isSupabaseConfigured) {
+  if (!appReady) {
     return (
       <PageWrapper>
         <div className="card mx-auto mt-20 max-w-sm text-center">
           <p className="text-2xl mb-3">⚙️</p>
           <p className="font-display font-semibold">Setup Required</p>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Add your Supabase keys to <code className="rounded bg-[var(--bg-surface)] px-1">.env.local</code>
+            Add your Firebase web config to <code className="rounded bg-[var(--bg-surface)] px-1">.env.local</code>
           </p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">
-            VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+            VITE_FIREBASE_API_KEY, PROJECT_ID, APP_ID, AUTH_DOMAIN, …
           </p>
         </div>
       </PageWrapper>

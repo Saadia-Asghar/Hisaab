@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, RefreshCw } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { listUnsettledDebts, settleDebtDoc, insertSingleDebt } from '../lib/hisaabFirestore'
+import { isDemoMode } from '../lib/demoMode'
+import {
+  subscribeDemo,
+  getDemoSnapshot,
+  demoSettleDebt,
+  demoInsertDebts,
+} from '../demo/demoStore'
 import { useAuth } from '../hooks/useAuth'
 import { useGroup } from '../hooks/useGroup'
 import { PageWrapper } from '../components/layout/PageWrapper'
@@ -14,6 +22,11 @@ export default function Debts() {
   const { session, user } = useAuth()
   const { showToast } = useToast()
   const { activeGroupId, members, refresh } = useGroup(user?.id)
+  const demoSnap = useSyncExternalStore(
+    isDemoMode() ? subscribeDemo : () => () => {},
+    isDemoMode() ? getDemoSnapshot : () => ({ debts: [] }),
+    isDemoMode() ? getDemoSnapshot : () => ({ debts: [] })
+  )
   // 'owed_to_me' = others owe me  |  'i_owe' = I owe others
   const [tab, setTab] = useState('owed_to_me')
   const [debts, setDebts] = useState([])
@@ -28,15 +41,22 @@ export default function Debts() {
       return
     }
     setLoading(true)
-    const { data } = await supabase
-      .from('debts')
-      .select('*')
-      .eq('group_id', activeGroupId)
-      .eq('settled', false)
-      .order('created_at', { ascending: false })
-    setDebts(data ?? [])
+    if (isDemoMode()) {
+      const rows = demoSnap.debts
+        .filter((d) => d.group_id === activeGroupId && !d.settled)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      setDebts(rows)
+      setLoading(false)
+      return
+    }
+    try {
+      const data = await listUnsettledDebts(activeGroupId)
+      setDebts(data ?? [])
+    } catch {
+      setDebts([])
+    }
     setLoading(false)
-  }, [activeGroupId])
+  }, [activeGroupId, demoSnap])
 
   useEffect(() => {
     load()
@@ -58,16 +78,20 @@ export default function Debts() {
   }
 
   async function settle(d) {
-    const { error } = await supabase
-      .from('debts')
-      .update({ settled: true, settled_at: new Date().toISOString() })
-      .eq('id', d.id)
-    if (error) {
-      showToast(error.message, 'error')
-    } else {
+    if (isDemoMode()) {
+      demoSettleDebt(d.id, true)
       showToast('Settled! ✓')
       load()
       refresh()
+      return
+    }
+    try {
+      await settleDebtDoc(activeGroupId, d.id, new Date().toISOString())
+      showToast('Settled! ✓')
+      load()
+      refresh()
+    } catch (error) {
+      showToast(error?.message ?? 'Could not settle', 'error')
     }
   }
 
@@ -89,22 +113,41 @@ export default function Debts() {
       showToast('Please select a member and enter an amount.', 'error')
       return
     }
-    const { error } = await supabase.from('debts').insert({
-      group_id: activeGroupId,
-      ower_id: oweId,
-      owed_to_id: user.id,
-      amount_paise: rupeesToPaise(rs),
-      description: form.desc || null,
-      settled: false,
-      created_at: new Date().toISOString(),
-    })
-    if (error) {
-      showToast(error.message, 'error')
-    } else {
+    if (isDemoMode()) {
+      demoInsertDebts([
+        {
+          group_id: activeGroupId,
+          ower_id: oweId,
+          owed_to_id: user.id,
+          amount_paise: rupeesToPaise(rs),
+          description: form.desc || null,
+          settled: false,
+          settled_at: null,
+          created_at: new Date().toISOString(),
+        },
+      ])
       showToast('Debt recorded successfully.')
       setFab(false)
       setForm({ owe: '', amount: '', desc: '' })
       load()
+      return
+    }
+    try {
+      await insertSingleDebt(activeGroupId, {
+        group_id: activeGroupId,
+        ower_id: oweId,
+        owed_to_id: user.id,
+        amount_paise: rupeesToPaise(rs),
+        description: form.desc || null,
+        settled: false,
+        created_at: new Date().toISOString(),
+      })
+      showToast('Debt recorded successfully.')
+      setFab(false)
+      setForm({ owe: '', amount: '', desc: '' })
+      load()
+    } catch (error) {
+      showToast(error?.message ?? 'Could not save debt', 'error')
     }
   }
 

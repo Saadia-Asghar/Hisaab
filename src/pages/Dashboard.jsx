@@ -2,7 +2,16 @@ import { useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, CheckCircle, Wallet, Copy, Users, Share2, LogOut } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { signOut } from 'firebase/auth'
+import { auth } from '../lib/firebase'
+import { createGroupDoc, addGroupMember, findGroupByInviteCode } from '../lib/hisaabFirestore'
+import { isDemoMode, exitDemoAndReload } from '../lib/demoMode'
+import {
+  demoCreateGroup,
+  demoJoinGroup,
+  getGroupByInviteCode,
+  reseedDemoTransactionsPoolDebts,
+} from '../demo/demoStore'
 import { useAuth } from '../hooks/useAuth'
 import { useGroup } from '../hooks/useGroup'
 import { useTransactions } from '../hooks/useTransactions'
@@ -14,6 +23,7 @@ import { Avatar } from '../components/ui/Avatar'
 import { SkeletonList } from '../components/ui/Skeleton'
 import { useToast } from '../context/ToastContext'
 import { seedDemoData } from '../utils/seedDemoData'
+import { getPublicAppUrl } from '../config/publicUrl'
 import { currentMonthKey, formatRsLabel } from '../utils/formatters'
 
 function genInvite() {
@@ -31,7 +41,7 @@ const CATEGORY_ICONS = {
 }
 
 export default function Dashboard() {
-  const { session, user, loading: authLoading, isSupabaseConfigured } = useAuth()
+  const { session, user, loading: authLoading, appReady, demoMode } = useAuth()
   const { showToast } = useToast()
   const { activeGroupId, setActiveGroupId, group, members, loading: groupLoading, refresh } = useGroup(user?.id)
   const { transactions, loading: txLoading, refresh: refreshTx } = useTransactions(activeGroupId)
@@ -73,12 +83,17 @@ export default function Dashboard() {
     )
   }
 
-  if (!isSupabaseConfigured) {
+  if (!appReady) {
     return (
       <PageWrapper>
-        <p className="text-center text-[var(--text-secondary)]">
-          Add Supabase credentials to .env.local
-        </p>
+        <div className="mx-auto max-w-md text-center">
+          <p className="font-display font-semibold text-[var(--text-primary)]">Setup required</p>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            Add Firebase credentials to{' '}
+            <code className="rounded bg-[var(--bg-surface)] px-1">.env.local</code>, or try interactive demo mode
+            from the home page (no backend).
+          </p>
+        </div>
       </PageWrapper>
     )
   }
@@ -95,7 +110,8 @@ export default function Dashboard() {
 
   function shareInvite() {
     if (!group?.invite_code) return
-    const text = `Join my Hisaab group.\nGroup: ${group.name}\nInvite code: ${group.invite_code}\n\nOpen: hisaab.vercel.app`
+    const openAt = getPublicAppUrl() || 'this app'
+    const text = `Join my Hisaab group.\nGroup: ${group.name}\nInvite code: ${group.invite_code}\n\nOpen: ${openAt}`
     if (navigator.share) {
       navigator.share({ title: 'Join Hisaab Group', text }).catch(() => null)
     } else {
@@ -108,30 +124,38 @@ export default function Dashboard() {
     e.preventDefault()
     setBusy(true)
     const targetPaise = Math.round(Number(gTarget || '0') * 100)
-    const code = genInvite()
-    const { data: g, error } = await supabase
-      .from('groups')
-      .insert({
+
+    if (isDemoMode()) {
+      const g = demoCreateGroup({
         name: gName,
-        created_by: user.id,
-        monthly_target: targetPaise,
-        invite_code: code,
-        current_month: currentMonthKey(),
+        createdById: user.id,
+        monthlyTargetPaise: targetPaise,
       })
-      .select()
-      .single()
-    if (error) {
-      showToast(error.message, 'error')
+      setActiveGroupId(g.id)
+      showToast(`Group ready! Invite code: ${g.invite_code}`)
+      setCreateOpen(false)
+      setBusy(false)
+      refresh()
+      refreshTx()
+      refreshPool()
+      return
+    }
+
+    const code = genInvite()
+    try {
+      const g = await createGroupDoc({
+        name: gName,
+        createdById: user.id,
+        monthlyTargetPaise: targetPaise,
+        inviteCode: code,
+        currentMonthKey: currentMonthKey(),
+      })
+      setActiveGroupId(g.id)
+    } catch (error) {
+      showToast(error?.message ?? 'Could not create group', 'error')
       setBusy(false)
       return
     }
-    const { error: e2 } = await supabase.from('group_members').insert({ group_id: g.id, user_id: user.id })
-    if (e2) {
-      showToast(e2.message, 'error')
-      setBusy(false)
-      return
-    }
-    setActiveGroupId(g.id)
     showToast(`Group ready! Invite code: ${code}`)
     setCreateOpen(false)
     setBusy(false)
@@ -142,16 +166,40 @@ export default function Dashboard() {
     e.preventDefault()
     setBusy(true)
     const code = inviteInput.trim().toUpperCase()
-    const { data: rows, error } = await supabase.rpc('get_group_by_invite', { inv: code })
-    const g = Array.isArray(rows) ? rows[0] : rows
-    if (error || !g) {
+
+    if (isDemoMode()) {
+      const g = getGroupByInviteCode(code)
+      if (!g) {
+        showToast('Invalid invite code', 'error')
+        setBusy(false)
+        return
+      }
+      demoJoinGroup(g.id, user.id)
+      setActiveGroupId(g.id)
+      showToast('Group joined successfully.')
+      setJoinOpen(false)
+      setBusy(false)
+      refresh()
+      refreshTx()
+      refreshPool()
+      return
+    }
+
+    let g = null
+    try {
+      g = await findGroupByInviteCode(code)
+    } catch {
+      g = null
+    }
+    if (!g) {
       showToast('Invalid invite code', 'error')
       setBusy(false)
       return
     }
-    const { error: e2 } = await supabase.from('group_members').insert({ group_id: g.id, user_id: user.id })
-    if (e2) {
-      showToast(e2.message, 'error')
+    try {
+      await addGroupMember(g.id, user.id)
+    } catch (e2) {
+      showToast(e2?.message ?? 'Could not join group', 'error')
       setBusy(false)
       return
     }
@@ -167,8 +215,20 @@ export default function Dashboard() {
       showToast('Create or join a group with members first.', 'error')
       return
     }
+    if (isDemoMode()) {
+      try {
+        reseedDemoTransactionsPoolDebts()
+        showToast('Demo data refreshed: transactions, pool, and debts.')
+        refreshTx()
+        refreshPool()
+        refresh()
+      } catch (err) {
+        showToast(err.message ?? 'Seed failed', 'error')
+      }
+      return
+    }
     try {
-      const r = await seedDemoData(supabase, activeGroupId, members)
+      const r = await seedDemoData(activeGroupId, members)
       showToast(`Demo seeded: ${r.transactions} tx, ${r.contributions} pool, ${r.debts} debts`)
       refreshTx()
       refreshPool()
@@ -202,10 +262,12 @@ export default function Dashboard() {
         <button
           type="button"
           className="btn-ghost flex items-center gap-1.5 py-2 px-3 text-xs"
-          onClick={() => supabase.auth.signOut()}
+          onClick={() =>
+            demoMode ? exitDemoAndReload() : auth && signOut(auth).catch(() => {})
+          }
         >
           <LogOut className="h-3.5 w-3.5" />
-          Sign out
+          {demoMode ? 'Exit demo' : 'Sign out'}
         </button>
       </header>
 
@@ -216,7 +278,7 @@ export default function Dashboard() {
             <p className="text-2xl mb-2">🏠</p>
             <p className="font-display font-semibold">Create or Join a Group</p>
             <p className="text-sm text-[var(--text-muted)] mt-1">
-              Start tracking shared expenses with your roommates.
+              Create a group to get a shared ledger, pool, and settlement view—household fintech, not a one-off split.
             </p>
           </div>
           <div className="flex gap-2">
@@ -442,7 +504,9 @@ export default function Dashboard() {
             className="card w-full max-w-md"
           >
             <h3 className="font-display text-lg font-semibold">Join with Invite Code</h3>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Enter the 6-character code from your roommate.</p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              Enter the code from someone already in the group (flat, hostel, family pool, etc.).
+            </p>
             <input
               className="input-field mt-4 text-center text-2xl font-display font-bold uppercase tracking-[0.3em]"
               placeholder="ABC123"

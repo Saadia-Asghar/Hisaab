@@ -6,6 +6,13 @@ const RESPONSE_CACHE = {
     share_rupees: 760,
     category: 'utilities',
   },
+  'electricity 3800 split 5': {
+    amount_rupees: 3800,
+    description: 'Electricity bill',
+    split_count: 5,
+    share_rupees: 760,
+    category: 'utilities',
+  },
   'bijli ka bill 3800 5 logon mein': {
     amount_rupees: 3800,
     description: 'Electricity bill',
@@ -27,6 +34,20 @@ const RESPONSE_CACHE = {
     share_rupees: 450,
     category: 'food',
   },
+  'pizza 1800 split 4': {
+    amount_rupees: 1800,
+    description: 'Pizza delivery',
+    split_count: 4,
+    share_rupees: 450,
+    category: 'food',
+  },
+  'pizza delivery 2400 6 bande': {
+    amount_rupees: 2400,
+    description: 'Pizza delivery',
+    split_count: 6,
+    share_rupees: 400,
+    category: 'food',
+  },
   'internet 1200 split 5': {
     amount_rupees: 1200,
     description: 'Internet bill',
@@ -34,7 +55,28 @@ const RESPONSE_CACHE = {
     share_rupees: 240,
     category: 'utilities',
   },
+  'internet 1500 5 logo mein': {
+    amount_rupees: 1500,
+    description: 'Internet bill',
+    split_count: 5,
+    share_rupees: 300,
+    category: 'utilities',
+  },
   'uber 650 3 log': {
+    amount_rupees: 650,
+    description: 'Uber ride',
+    split_count: 3,
+    share_rupees: 217,
+    category: 'transport',
+  },
+  'uber 650 split 3': {
+    amount_rupees: 650,
+    description: 'Uber ride',
+    split_count: 3,
+    share_rupees: 217,
+    category: 'transport',
+  },
+  'uber 650 hum 3 they': {
     amount_rupees: 650,
     description: 'Uber ride',
     split_count: 3,
@@ -47,6 +89,13 @@ const RESPONSE_CACHE = {
     split_count: 5,
     share_rupees: 160,
     category: 'utilities',
+  },
+  'ahmed ne grocery li 1200 hum 4 hain': {
+    amount_rupees: 1200,
+    description: 'Groceries',
+    split_count: 4,
+    share_rupees: 300,
+    category: 'groceries',
   },
 }
 
@@ -160,5 +209,18 @@ export async function parseExpenseText(rawInput) {
 
   return null
 }
+
+/**
+ * Example lines that resolve from RESPONSE_CACHE only (no DeepSeek API key required).
+ * Saving to Firestore still requires a configured Firebase project + auth + group.
+ */
+export const OFFLINE_PARSER_EXAMPLE_LINES = [
+  'bijli 3800 split 5',
+  'electricity 3800 split 5',
+  'pizza 1800 split 4',
+  'uber 650 split 3',
+  'internet 1500 5 logo mein',
+  'ahmed ne grocery li 1200 hum 4 hain',
+]
 
 export { RESPONSE_CACHE }
